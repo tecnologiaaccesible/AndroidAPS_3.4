@@ -15,7 +15,12 @@ android {
         versionName = "0.1.0-readonly"
     }
 
-    // Match the only AAPS pump-module flavor required for this standalone app.
+    // Compile only the two BLE source files from the shared module.
+    // No AAPS pump drivers, closed-loop algorithms, Firebase or AAPS app dependency.
+    sourceSets {
+        getByName("main").java.srcDir("../pump/ypsopump/src/main/kotlin/app/aaps/pump/ypsopump/ble")
+    }
+
     flavorDimensions.add("standard")
     productFlavors {
         create("full") {
@@ -25,6 +30,6 @@ android {
 }
 
 dependencies {
-    // Reuse the tested read-only BLE diagnostics; do not import AAPS's :app.
-    implementation(project(":pump:ypsopump"))
+    // Only required because the shared BLE class has @Inject annotations for AAPS.
+    implementation("javax.inject:javax.inject:1")
 }
