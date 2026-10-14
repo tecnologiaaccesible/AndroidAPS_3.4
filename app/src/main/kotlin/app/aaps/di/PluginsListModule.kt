@@ -68,6 +68,7 @@ import app.aaps.pump.medtrum.MedtrumPlugin
 import app.aaps.pump.omnipod.dash.OmnipodDashPumpPlugin
 import app.aaps.pump.omnipod.eros.OmnipodErosPumpPlugin
 import app.aaps.pump.virtual.VirtualPumpPlugin
+import app.aaps.pump.ypsopump.YpsoLabPlugin
 import dagger.Binds
 import dagger.Module
 import dagger.multibindings.IntKey
@@ -222,6 +223,12 @@ abstract class PluginsListModule {
     @IntoMap
     @IntKey(170)
     abstract fun bindEquilPumpPlugin(plugin: EquilPumpPlugin): PluginBase
+
+    @Binds
+    @AllConfigs
+    @IntoMap
+    @IntKey(175)
+    abstract fun bindYpsoLabPlugin(plugin: YpsoLabPlugin): PluginBase
 
     @Binds
     @AllConfigs
