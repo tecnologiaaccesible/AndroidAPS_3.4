@@ -64,6 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Decode Secrets Keystore Set and Oauth2 to Env
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
           if [ -n "${{ secrets.KEYSTORE_SET }}" ]; then
             echo "🔐 Decoding KEYSTORE_SET..."
@@ -95,6 +96,7 @@ jobs:
           echo "GDRIVE_OAUTH2=${{ secrets.GDRIVE_OAUTH2 }}" >> $GITHUB_ENV
 
       - name: Check Secrets
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
           echo "🔍 Checking required secrets..."
           MISSING=0
@@ -122,11 +124,13 @@ jobs:
           echo "✅ All required secrets are present."
 
       - name: Decode keystore file
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
           mkdir -p "$RUNNER_TEMP/keystore"
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keystore/keystore.jks"
 
       - name: Validating keystore, alias and password
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
           set -x
           echo "🔐 Validating keystore, alias and password"
@@ -156,6 +160,7 @@ jobs:
           echo "✅ Keystore and credentials validated."
 
       - name: Decode GDrive OAuth2 secrets
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
           echo "🔐 Decoding GDRIVE_OAUTH2..."
           DECODED=$(echo "${{ secrets.GDRIVE_OAUTH2 }}" | base64 -d)
@@ -172,6 +177,7 @@ jobs:
           echo "✅ GDRIVE_CLIENT_ID and GDRIVE_REFRESH_TOKEN extracted from GDRIVE_OAUTH2"
 
       - name: Retrieving Google Drive access token
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
           echo "🔐 Getting Google OAuth2 access token..."
           TOKEN_RESPONSE=$(curl -s -X POST https://oauth2.googleapis.com/token \
@@ -255,7 +261,15 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Validate YpsoPump experimental module
+        if: github.ref_name == 'ypsopump-lab-3.4.2.6'
+        run: |
+          ./gradlew :pump:ypsopump:assembleDebug :pump:ypsopump:testDebugUnitTest \
+            --no-daemon --stacktrace \
+            -Dorg.gradle.jvmargs="-Xmx6g -XX:+UseParallelGC"
+
       - name: Build APKs
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
               ./gradlew :app:assemble${{ env.BUILD_VARIANT }} :wear:assemble${{ env.BUILD_VARIANT }} \
               -Dorg.gradle.jvmargs="-Xmx8g -XX:+UseParallelGC -Xss1024m" \
@@ -270,19 +284,20 @@ jobs:
               -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
       - name: Rename APKs with version
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
           mv app/build/outputs/apk/${{ env.VARIANT_FLAVOR }}/${{ env.VARIANT_TYPE }}/*.apk aaps-${{ env.VERSION }}${{ env.VERSION_SUFFIX }}.apk
           mv wear/build/outputs/apk/${{ env.VARIANT_FLAVOR }}/${{ env.VARIANT_TYPE }}/*.apk aaps-wear-${{ env.VERSION }}${{ env.VERSION_SUFFIX }}.apk
 
-      - name: Save experimental APKs
+      - name: Save YpsoPump module test reports
         if: github.ref_name == 'ypsopump-lab-3.4.2.6'
         uses: actions/upload-artifact@v4
         with:
-          name: ypsopump-lab
+          name: ypsopump-module-test-reports
           path: |
-            aaps-*.apk
-            aaps-wear-*.apk
-          if-no-files-found: error
+            pump/ypsopump/build/reports/tests/
+            pump/ypsopump/build/test-results/
+          if-no-files-found: warn
 
       - name: Upload APKs to Google Drive
         if: github.ref_name != 'ypsopump-lab-3.4.2.6'
@@ -375,7 +390,7 @@ jobs:
   cleanup:
     name: Cleanup Old Workflow Runs
     needs: build
-    if: always()
+    if: ${{ always() && github.ref_name != 'ypsopump-lab-3.4.2.6' }}
     permissions:
       actions: write
     uses: ./.github/workflows/cleanup-workflow-runs.yml
