@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">YpsoPump Lab - solo lectura</string>
+    <string name="warning">Aplicación experimental de diagnóstico, sin funciones de dosificación. Utilizar exclusivamente con una bomba de pruebas desconectada del cuerpo.</string>
+    <string name="scan">Buscar bombas YpsoPump</string>
+    <string name="disconnect">Desconectar</string>
+    <string name="devices">Dispositivos encontrados</string>
+    <string name="log">Registro de diagnóstico</string>
+    <string name="grant_bluetooth">Permite el acceso a dispositivos Bluetooth y vuelve a pulsar Buscar.</string>
+    <string name="choose_device">Conectar con %1$s, dispositivo terminado en %2$s</string>
+</resources>
