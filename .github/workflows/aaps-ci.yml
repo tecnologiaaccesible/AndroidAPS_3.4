@@ -264,7 +264,7 @@ jobs:
       - name: Validate YpsoPump experimental module
         if: github.ref_name == 'ypsopump-lab-3.4.2.6'
         run: |
-          ./gradlew :pump:ypsopump:assembleFullDebug :pump:ypsopump:testFullDebugUnitTest \
+          ./gradlew :pump:ypsopump:assembleFullDebug :pump:ypsopump:testFullDebugUnitTest :app:compileFullDebugKotlin \
             --no-daemon --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx6g -XX:+UseParallelGC"
 
