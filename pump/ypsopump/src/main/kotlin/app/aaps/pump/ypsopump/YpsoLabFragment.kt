@@ -1,0 +1,126 @@
+package app.aaps.pump.ypsopump
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import app.aaps.pump.ypsopump.ble.YpsoBleDiagnostics
+import dagger.android.support.DaggerFragment
+import javax.inject.Inject
+
+/**
+ * Accessible, explicitly read-only device inspection.
+ * No bolus, basal, setting changes or cryptographic key handling.
+ */
+class YpsoLabFragment : DaggerFragment() {
+
+    @Inject lateinit var ble: YpsoBleDiagnostics
+
+    private var logText: TextView? = null
+    private var deviceList: LinearLayout? = null
+    private val messages = mutableListOf<String>()
+
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
+    ): View {
+        val context = requireContext()
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+        val scroll = ScrollView(context)
+        val content = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(content)
+        root.addView(scroll, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+
+        content.addView(TextView(context).apply {
+            text = getString(R.string.ypsolab_description)
+            textSize = 17f
+            setPadding(0, 0, 0, 16)
+        })
+
+        content.addView(Button(context).apply {
+            text = getString(R.string.ypsolab_scan)
+            setOnClickListener {
+                if (!ble.hasBluetoothPermissions()) {
+                    requestPermissions(
+                        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT),
+                        815
+                    )
+                    appendLog(getString(R.string.ypsolab_grant_permission))
+                } else {
+                    deviceList?.removeAllViews()
+                    ble.scan()
+                }
+            }
+        })
+
+        content.addView(Button(context).apply {
+            text = getString(R.string.ypsolab_disconnect)
+            setOnClickListener {
+                ble.stopScan()
+                ble.disconnect()
+            }
+        })
+
+        content.addView(TextView(context).apply {
+            text = getString(R.string.ypsolab_results)
+            textSize = 18f
+            setPadding(0, 16, 0, 8)
+        })
+        deviceList = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(deviceList)
+
+        logText = TextView(context).apply {
+            textSize = 16f
+            setTextIsSelectable(true)
+            setPadding(0, 16, 0, 8)
+            text = messages.joinToString("\n")
+        }
+        content.addView(logText)
+        return root
+    }
+
+    override fun onStart() {
+        super.onStart()
+        ble.setListeners(
+            onEvent = { appendLog(it) },
+            onDevice = { address, name ->
+                if (!isAdded) return@setListeners
+                val button = Button(requireContext()).apply {
+                    text = "$name (${address.takeLast(5)})"
+                    contentDescription = getString(R.string.ypsolab_connect_to, name, address.takeLast(5))
+                    setOnClickListener { ble.connect(address) }
+                }
+                deviceList?.addView(button)
+            }
+        )
+    }
+
+    private fun appendLog(message: String) {
+        messages.add(message)
+        while (messages.size > 40) messages.removeAt(0)
+        logText?.text = messages.joinToString("\n")
+    }
+
+    override fun onStop() {
+        ble.setListeners(null, null)
+        ble.stopScan()
+        ble.disconnect()
+        super.onStop()
+    }
+
+    override fun onDestroyView() {
+        logText = null
+        deviceList = null
+        super.onDestroyView()
+    }
+}
