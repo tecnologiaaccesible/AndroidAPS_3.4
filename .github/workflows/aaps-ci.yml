@@ -264,7 +264,7 @@ jobs:
       - name: Validate YpsoPump experimental module
         if: github.ref_name == 'ypsopump-lab-3.4.2.6'
         run: |
-          ./gradlew :pump:ypsopump:assembleFullDebug :pump:ypsopump:testFullDebugUnitTest :app:compileFullDebugKotlin \
+          ./gradlew :pump:ypsopump:assembleFullDebug :pump:ypsopump:testFullDebugUnitTest :app:compileFullDebugKotlin :ypsolab:assembleFullDebug \
             --no-daemon --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx6g -XX:+UseParallelGC"
 
@@ -298,6 +298,31 @@ jobs:
             pump/ypsopump/build/reports/tests/
             pump/ypsopump/build/test-results/
           if-no-files-found: warn
+
+      - name: Verify standalone YpsoPump Lab package
+        if: github.ref_name == 'ypsopump-lab-3.4.2.6'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find ypsolab/build/outputs/apk/full/debug -maxdepth 1 -type f -name '*.apk' | head -n 1)
+          test -n "$APK" || { echo "::error::Standalone APK not found"; exit 1; }
+          AAPT=$(find "${ANDROID_HOME}/build-tools" -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)
+          test -x "$AAPT" || { echo "::error::Android aapt not found"; exit 1; }
+          PACKAGE_NAME=$("$AAPT" dump badging "$APK" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)
+          if [ "$PACKAGE_NAME" != "app.aaps.ypsopump.lab" ]; then
+            echo "::error::Unexpected applicationId: $PACKAGE_NAME"
+            exit 1
+          fi
+          echo "Verified isolated app identity: $PACKAGE_NAME"
+
+      - name: Publish read-only YpsoPump Lab APK
+        if: github.ref_name == 'ypsopump-lab-3.4.2.6'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ypsopump-lab-readonly-debug-apk
+          path: ypsolab/build/outputs/apk/full/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload APKs to Google Drive
         if: github.ref_name != 'ypsopump-lab-3.4.2.6'
