@@ -94,13 +94,14 @@ class YpsoLabFragment : DaggerFragment() {
         ble.setListeners(
             onEvent = { appendLog(it) },
             onDevice = { address, name ->
-                if (!isAdded) return@setListeners
-                val button = Button(requireContext()).apply {
-                    text = "$name (${address.takeLast(5)})"
-                    contentDescription = getString(R.string.ypsolab_connect_to, name, address.takeLast(5))
-                    setOnClickListener { ble.connect(address) }
+                if (isAdded) {
+                    val button = Button(requireContext()).apply {
+                        text = "$name (${address.takeLast(5)})"
+                        contentDescription = getString(R.string.ypsolab_connect_to, name, address.takeLast(5))
+                        setOnClickListener { ble.connect(address) }
+                    }
+                    deviceList?.addView(button)
                 }
-                deviceList?.addView(button)
             }
         )
     }
