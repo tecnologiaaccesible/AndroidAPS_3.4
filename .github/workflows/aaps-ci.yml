@@ -194,6 +194,7 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch selected tag from upstream
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
           git remote add upstream https://github.com/nightscout/AndroidAPS.git || true
           git fetch upstream refs/tags/${{ github.event.inputs.tagName }}:refs/tags/${{ github.event.inputs.tagName }}
@@ -215,6 +216,7 @@ jobs:
           echo "ℹ️ Tag $TAG → JDK $JAVA_VERSION (from jdk-map.json)"
 
       - name: Switch to selected tag
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
           git checkout refs/tags/${{ github.event.inputs.tagName }}
           echo "✅ Checked out tag ${{ github.event.inputs.tagName }}"
@@ -272,7 +274,18 @@ jobs:
           mv app/build/outputs/apk/${{ env.VARIANT_FLAVOR }}/${{ env.VARIANT_TYPE }}/*.apk aaps-${{ env.VERSION }}${{ env.VERSION_SUFFIX }}.apk
           mv wear/build/outputs/apk/${{ env.VARIANT_FLAVOR }}/${{ env.VARIANT_TYPE }}/*.apk aaps-wear-${{ env.VERSION }}${{ env.VERSION_SUFFIX }}.apk
 
+      - name: Save experimental APKs
+        if: github.ref_name == 'ypsopump-lab-3.4.2.6'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ypsopump-lab
+          path: |
+            aaps-*.apk
+            aaps-wear-*.apk
+          if-no-files-found: error
+
       - name: Upload APKs to Google Drive
+        if: github.ref_name != 'ypsopump-lab-3.4.2.6'
         run: |
           set -e
           echo "🔐 Start uploading APKs to Google Drive..."
