@@ -6,11 +6,13 @@ Esta aplicación Android se compila en el módulo `:ypsolab`. **No es la aplicac
 
 - Busca dispositivos YpsoPump visibles mediante Bluetooth LE.
 - Permite elegir manualmente la bomba encontrada.
+- Ofrece un botón independiente **Vincular Bluetooth (código de 6 cifras)** que pide a Android iniciar el emparejamiento con la bomba. La pantalla del sistema, no nuestra app, solicita el código.
+- Muestra el estado de la vinculación Bluetooth, sin almacenar ni transmitir el PIN.
 - Abre una conexión GATT y descubre los servicios disponibles.
 - Intenta leer, sin enviar escrituras, las características de identificación y versiones publicadas por la bomba.
 - Presenta los resultados en una interfaz sencilla con etiquetas para TalkBack.
 
-**No incluye** control de bolos, basales, emparejamiento criptográfico ni funciones de tratamiento. Algunas lecturas pueden requerir autenticación y fallar. El funcionamiento no está comprobado en una bomba real.
+**No incluye** control de bolos, basales, autenticación criptográfica a nivel de aplicación ni funciones de tratamiento. La vinculación Bluetooth de Android no autentica el protocolo cifrado YpsoPump. Algunas lecturas pueden requerir autenticación y fallar. El funcionamiento no está comprobado en una bomba real.
 
 ## Compilar desde GitHub Actions
 
