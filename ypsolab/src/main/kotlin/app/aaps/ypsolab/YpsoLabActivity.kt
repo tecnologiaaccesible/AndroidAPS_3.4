@@ -88,8 +88,17 @@ class YpsoLabActivity : Activity() {
             onEvent = { message -> appendMessage(message) },
             onDevice = { address, name ->
                 val shortAddress = address.takeLast(5)
-                deviceList?.addView(Button(this).apply {
+                deviceList?.addView(TextView(this).apply {
                     text = "$name ($shortAddress)"
+                    textSize = 16f
+                })
+                deviceList?.addView(Button(this).apply {
+                    text = getString(R.string.pair_bluetooth)
+                    contentDescription = getString(R.string.pair_with_device, name, shortAddress)
+                    setOnClickListener { ble.requestBluetoothBond(address) }
+                })
+                deviceList?.addView(Button(this).apply {
+                    text = getString(R.string.connect_read_only)
                     contentDescription = getString(R.string.choose_device, name, shortAddress)
                     setOnClickListener { ble.connect(address) }
                 })
