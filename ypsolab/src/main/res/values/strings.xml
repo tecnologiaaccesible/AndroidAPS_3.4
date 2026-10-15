@@ -7,5 +7,8 @@
     <string name="devices">Dispositivos encontrados</string>
     <string name="log">Registro de diagnóstico</string>
     <string name="grant_bluetooth">Permite el acceso a dispositivos Bluetooth y vuelve a pulsar Buscar.</string>
-    <string name="choose_device">Conectar con %1$s, dispositivo terminado en %2$s</string>
+    <string name="choose_device">Conectar en solo lectura con %1$s, dispositivo terminado en %2$s</string>
+    <string name="pair_bluetooth">Vincular Bluetooth (código de 6 cifras)</string>
+    <string name="pair_with_device">Solicitar vinculación Bluetooth con %1$s, dispositivo terminado en %2$s</string>
+    <string name="connect_read_only">Conectar para leer información</string>
 </resources>
