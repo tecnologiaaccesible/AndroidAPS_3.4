@@ -36,6 +36,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
     private val pendingReads = ArrayDeque<Pair<String, BluetoothGattCharacteristic>>()
     private var scannerCallback: ScanCallback? = null
     private var connection: BluetoothGatt? = null
+    private var bondSession: Int = 0
 
     @Volatile private var eventListener: ((String) -> Unit)? = null
     @Volatile private var deviceListener: ((String, String) -> Unit)? = null
@@ -125,6 +126,92 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
         } catch (_: SecurityException) {
             report("No se pudo detener el escaneo.")
         }
+    }
+
+    /**
+     * Explicit, user-initiated Android Bluetooth bonding.
+     *
+     * Android owns the six-digit passkey prompt. This operation does NOT perform
+     * YpsoPump application-layer authentication or authorize any insulin control.
+     * A separate button in the lab UI deliberately keeps bonding opt-in.
+     */
+    @SuppressLint("MissingPermission")
+    fun requestBluetoothBond(address: String) {
+        if (!hasBluetoothPermissions()) {
+            report("Faltan permisos para vincular por Bluetooth.")
+            return
+        }
+        val device = synchronized(devices) { devices[address] }
+        if (device == null) {
+            report("Dispositivo no encontrado; vuelve a buscar la bomba.")
+            return
+        }
+        stopScan()
+        disconnect()
+        try {
+            when (device.bondState) {
+                BluetoothDevice.BOND_BONDED -> {
+                    report("Bluetooth: dispositivo ya vinculado en Android. No implica autenticación con la bomba.")
+                }
+                BluetoothDevice.BOND_BONDING -> {
+                    report("Vinculación Bluetooth en curso. Consulta el aviso de Android e introduce el código de seis cifras de la bomba.")
+                    observeBondState(device)
+                }
+                else -> {
+                    report("Solicitando vinculación Bluetooth a Android; confirma la solicitud en la bomba e introduce en el teléfono su código de seis cifras.")
+                    if (device.createBond()) {
+                        observeBondState(device)
+                    } else {
+                        report("Android no ha podido iniciar la vinculación.")
+                    }
+                }
+            }
+        } catch (_: SecurityException) {
+            report("Android ha rechazado el acceso Bluetooth.")
+        } catch (_: IllegalStateException) {
+            report("No se pudo iniciar la vinculación Bluetooth.")
+        }
+    }
+
+    /**
+     * Poll state only for UI diagnostics, never handle or store a passkey.
+     * Some Android implementations hide the app while showing the system dialog.
+     */
+    @SuppressLint("MissingPermission")
+    private fun observeBondState(device: BluetoothDevice) {
+        val session = ++bondSession
+        mainHandler.postDelayed(object : Runnable {
+            var attempts = 0
+            var observedBonding = false
+
+            override fun run() {
+                if (session != bondSession) return
+                if (!hasPermission(Manifest.permission.BLUETOOTH_CONNECT)) return
+                attempts++
+                try {
+                    when (device.bondState) {
+                        BluetoothDevice.BOND_BONDED -> {
+                            report("Vinculación Bluetooth completada. La autenticación cifrada del protocolo YpsoPump sigue sin implementarse.")
+                            return
+                        }
+                        BluetoothDevice.BOND_BONDING -> observedBonding = true
+                        BluetoothDevice.BOND_NONE -> {
+                            if (observedBonding || attempts >= 10) {
+                                report("Vinculación no completada o cancelada. Repite el procedimiento desde la bomba.")
+                                return
+                            }
+                        }
+                    }
+                    if (attempts >= 60) {
+                        report("Tiempo de espera de vinculación agotado.")
+                        return
+                    }
+                    mainHandler.postDelayed(this, 1_000L)
+                } catch (_: SecurityException) {
+                    report("No se puede consultar el estado de vinculación Bluetooth.")
+                }
+            }
+        }, 1_000L)
     }
 
     @SuppressLint("MissingPermission")
