@@ -15,10 +15,11 @@ android {
         versionName = "0.1.0-readonly"
     }
 
-    // Compile only the two BLE source files from the shared module.
+    // Compile read-only BLE diagnostics and the offline authentication state model.
     // No AAPS pump drivers, closed-loop algorithms, Firebase or AAPS app dependency.
     sourceSets {
         getByName("main").java.srcDir("../pump/ypsopump/src/main/kotlin/app/aaps/pump/ypsopump/ble")
+        getByName("main").java.srcDir("../pump/ypsopump/src/main/kotlin/app/aaps/pump/ypsopump/auth")
     }
 
     flavorDimensions.add("standard")
