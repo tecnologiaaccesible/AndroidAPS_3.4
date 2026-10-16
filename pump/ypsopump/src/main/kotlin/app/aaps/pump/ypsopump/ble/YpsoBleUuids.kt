@@ -30,6 +30,23 @@ object YpsoBleUuids {
         historyVersion to "Versión de historial"
     )
 
+    /**
+     * Firmware versions on the observed V05.02.04 pump are null-terminated
+     * ASCII strings. Show readable versions; preserve decimal bytes for binary data.
+     * Never interpret this as authenticated medical data.
+     */
+    fun formatReadOnlyValue(bytes: ByteArray): String {
+        if (bytes.isEmpty()) return "Sin datos"
+        val withoutNull = bytes.takeWhile { it != 0.toByte() }
+        val printable = withoutNull.isNotEmpty() &&
+            withoutNull.all { value -> (value.toInt() and 0xff) in 32..126 }
+        return if (printable) {
+            withoutNull.toByteArray().toString(Charsets.US_ASCII)
+        } else {
+            bytes.joinToString(".") { (it.toInt() and 255).toString() }
+        }
+    }
+
     fun isCandidateName(name: String?): Boolean {
         if (name.isNullOrBlank()) return false
         return name.startsWith("YpsoPump_", ignoreCase = true) ||
