@@ -87,6 +87,21 @@ class YpsoLabActivity : Activity() {
             text = ""
         }
         body.addView(output)
+        body.addView(Button(this).apply {
+            text = "Copiar registro de diagnóstico"
+            contentDescription = "Copiar registro de diagnóstico Bluetooth al portapapeles"
+            setOnClickListener {
+                // On-demand only: the log may include the device's advertised name.
+                val log = messages.joinToString("\\n")
+                if (log.isNotBlank()) {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("YpsoPump Lab - registro", log))
+                    Toast.makeText(this@YpsoLabActivity, "Registro copiado", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@YpsoLabActivity, "Aún no hay mensajes", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
 
         body.addView(TextView(this).apply {
             text = getString(R.string.gatt_map_title)
