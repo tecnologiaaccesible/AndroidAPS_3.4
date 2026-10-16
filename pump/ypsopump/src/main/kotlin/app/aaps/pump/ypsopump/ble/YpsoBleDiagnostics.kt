@@ -39,10 +39,16 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
 
     @Volatile private var eventListener: ((String) -> Unit)? = null
     @Volatile private var deviceListener: ((String, String) -> Unit)? = null
+    @Volatile private var inventoryListener: ((String) -> Unit)? = null
 
-    fun setListeners(onEvent: ((String) -> Unit)?, onDevice: ((String, String) -> Unit)?) {
+    fun setListeners(
+        onEvent: ((String) -> Unit)?,
+        onDevice: ((String, String) -> Unit)?,
+        onInventory: ((String) -> Unit)? = null
+    ) {
         eventListener = onEvent
         deviceListener = onDevice
+        inventoryListener = onInventory
     }
 
     private fun report(message: String) {
@@ -276,6 +282,21 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
                 return
             }
             val services = gatt.services
+            val metadata = services.map { service ->
+                YpsoGattInventory.Service(
+                    service.uuid,
+                    service.characteristics.map { characteristic ->
+                        YpsoGattInventory.Characteristic(
+                            characteristic.uuid,
+                            characteristic.properties,
+                            characteristic.descriptors.size
+                        )
+                    }
+                )
+            }
+            val inventory = YpsoGattInventory.format(metadata)
+            mainHandler.post { inventoryListener?.invoke(inventory) }
+            report("Mapa GATT disponible: servicios, características y propiedades (sin comandos).")
             report("Servicios GATT encontrados: ${services.size}")
             val bonded = try {
                 gatt.device.bondState == BluetoothDevice.BOND_BONDED
