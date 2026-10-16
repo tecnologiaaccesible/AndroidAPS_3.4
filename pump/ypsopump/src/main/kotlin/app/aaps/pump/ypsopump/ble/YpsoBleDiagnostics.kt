@@ -40,15 +40,18 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
     @Volatile private var eventListener: ((String) -> Unit)? = null
     @Volatile private var deviceListener: ((String, String) -> Unit)? = null
     @Volatile private var inventoryListener: ((String) -> Unit)? = null
+    @Volatile private var linkListener: ((Boolean) -> Unit)? = null
 
     fun setListeners(
         onEvent: ((String) -> Unit)?,
         onDevice: ((String, String) -> Unit)?,
-        onInventory: ((String) -> Unit)? = null
+        onInventory: ((String) -> Unit)? = null,
+        onLinkState: ((Boolean) -> Unit)? = null
     ) {
         eventListener = onEvent
         deviceListener = onDevice
         inventoryListener = onInventory
+        linkListener = onLinkState
     }
 
     private fun report(message: String) {
@@ -255,6 +258,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
             } finally {
                 gatt.close()
             }
+            mainHandler.post { linkListener?.invoke(false) }
             report("Desconectado.")
         }
     }
@@ -263,11 +267,13 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
+                mainHandler.post { linkListener?.invoke(true) }
                 report("Enlace BLE establecido. Descubriendo servicios.")
                 if (hasPermission(Manifest.permission.BLUETOOTH_CONNECT)) {
                     if (!gatt.discoverServices()) report("Falló el inicio del descubrimiento GATT.")
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
+                mainHandler.post { linkListener?.invoke(false) }
                 report("Conexión BLE terminada (estado $status).")
                 synchronized(pendingReads) { pendingReads.clear() }
                 if (connection === gatt) connection = null
