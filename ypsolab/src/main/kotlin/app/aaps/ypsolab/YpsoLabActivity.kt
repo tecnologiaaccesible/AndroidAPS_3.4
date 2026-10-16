@@ -2,6 +2,9 @@ package app.aaps.ypsolab
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.ViewGroup
@@ -9,6 +12,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import app.aaps.pump.ypsopump.ble.YpsoBleDiagnostics
 
 /**
@@ -23,6 +27,9 @@ class YpsoLabActivity : Activity() {
     private val messages = ArrayDeque<String>()
     private var output: TextView? = null
     private var deviceList: LinearLayout? = null
+    private var gattMapText: TextView? = null
+    private var copyGattButton: Button? = null
+    private var gattInventory: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +55,7 @@ class YpsoLabActivity : Activity() {
             setOnClickListener {
                 if (ble.hasBluetoothPermissions()) {
                     deviceList?.removeAllViews()
+                    clearGattInventory()
                     ble.scan()
                 } else {
                     requestPermissions(arrayOf(
@@ -79,6 +87,34 @@ class YpsoLabActivity : Activity() {
             text = ""
         }
         body.addView(output)
+
+        body.addView(TextView(this).apply {
+            text = getString(R.string.gatt_map_title)
+            textSize = 20f
+            setPadding(0, 20, 0, 8)
+        })
+        body.addView(TextView(this).apply {
+            text = getString(R.string.gatt_map_description)
+            textSize = 16f
+        })
+        copyGattButton = Button(this).apply {
+            text = getString(R.string.copy_gatt_map)
+            isEnabled = false
+            setOnClickListener {
+                if (gattInventory.isNotBlank()) {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("YpsoPump Lab - mapa GATT", gattInventory))
+                    Toast.makeText(this@YpsoLabActivity, R.string.gatt_map_copied, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        body.addView(copyGattButton)
+        gattMapText = TextView(this).apply {
+            text = getString(R.string.gatt_map_waiting)
+            textSize = 15f
+            setTextIsSelectable(true)
+        }
+        body.addView(gattMapText)
         setContentView(container)
     }
 
@@ -100,11 +136,25 @@ class YpsoLabActivity : Activity() {
                 deviceList?.addView(Button(this).apply {
                     text = getString(R.string.connect_read_only)
                     contentDescription = getString(R.string.choose_device, name, shortAddress)
-                    setOnClickListener { ble.connect(address) }
+                    setOnClickListener {
+                        clearGattInventory()
+                        ble.connect(address)
+                    }
                 })
                 appendMessage("Bomba encontrada: $name ($shortAddress)")
+            },
+            onInventory = { inventory ->
+                gattInventory = inventory
+                gattMapText?.text = inventory
+                copyGattButton?.isEnabled = true
             }
         )
+    }
+
+    private fun clearGattInventory() {
+        gattInventory = ""
+        gattMapText?.text = getString(R.string.gatt_map_waiting)
+        copyGattButton?.isEnabled = false
     }
 
     private fun appendMessage(message: String) {
@@ -124,6 +174,7 @@ class YpsoLabActivity : Activity() {
                 ble.hasBluetoothPermissions()
             ) {
                 deviceList?.removeAllViews()
+                clearGattInventory()
                 ble.scan()
             } else {
                 appendMessage(getString(R.string.grant_bluetooth))
@@ -132,7 +183,7 @@ class YpsoLabActivity : Activity() {
     }
 
     override fun onStop() {
-        ble.setListeners(null, null)
+        ble.setListeners(null, null, null)
         ble.stopScan()
         ble.disconnect()
         super.onStop()
@@ -141,6 +192,8 @@ class YpsoLabActivity : Activity() {
     override fun onDestroy() {
         deviceList = null
         output = null
+        gattMapText = null
+        copyGattButton = null
         super.onDestroy()
     }
 
