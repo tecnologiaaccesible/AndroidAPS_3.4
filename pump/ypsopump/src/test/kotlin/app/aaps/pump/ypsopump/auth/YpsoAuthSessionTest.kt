@@ -59,6 +59,39 @@ class YpsoAuthSessionTest {
         assertFalse(session.permitsPhysicalPumpOperation())
     }
 
+    @Test fun pendingAuthorizationTimesOutAndLateSuccessIsRejected() {
+        val clock = FakeClock()
+        val session = YpsoAuthSession(AvailableProvider(), clock::read, 100L, 30L)
+        session.connect()
+        assertEquals(YpsoAuthSession.Status.AWAITING_AUTHORIZATION, session.beginAuthentication().status)
+        clock.now = 1029L
+        assertEquals(YpsoAuthSession.Status.AWAITING_AUTHORIZATION, session.state().status)
+        clock.now = 1030L
+        assertEquals(YpsoAuthSession.Failure.AUTHORIZATION_TIMEOUT, session.state().failure)
+        assertEquals(YpsoAuthSession.Failure.INVALID_SESSION, session.acceptSyntheticFixture().failure)
+        assertFalse(session.permitsPhysicalPumpOperation())
+    }
+
+    @Test fun disconnectBeforeAuthorizationResponseInvalidatesPendingRequest() {
+        val clock = FakeClock()
+        val session = YpsoAuthSession(AvailableProvider(), clock::read)
+        session.connect()
+        session.beginAuthentication()
+        session.disconnect()
+        assertEquals(YpsoAuthSession.Failure.INVALID_SESSION, session.acceptSyntheticFixture().failure)
+        assertFalse(session.permitsPhysicalPumpOperation())
+    }
+
+    @Test fun rejectsNonpositiveAuthorizationTimeout() {
+        var rejected = false
+        try {
+            YpsoAuthSession(clockMillis = { 0L }, authorizationTimeoutMillis = 0)
+        } catch (_: IllegalArgumentException) {
+            rejected = true
+        }
+        assertEquals(true, rejected)
+    }
+
     @Test fun rejectsNonpositiveTtl() {
         var rejected = false
         try {
