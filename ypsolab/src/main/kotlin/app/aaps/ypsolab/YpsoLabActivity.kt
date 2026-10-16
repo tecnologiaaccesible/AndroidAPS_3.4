@@ -92,7 +92,7 @@ class YpsoLabActivity : Activity() {
             contentDescription = "Copiar registro de diagnóstico Bluetooth al portapapeles"
             setOnClickListener {
                 // On-demand only: the log may include the device's advertised name.
-                val log = messages.joinToString("\\n")
+                val log = messages.joinToString("\n")
                 if (log.isNotBlank()) {
                     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("YpsoPump Lab - registro", log))
