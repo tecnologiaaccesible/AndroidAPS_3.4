@@ -15,7 +15,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
-import java.nio.charset.StandardCharsets
 import java.util.ArrayDeque
 import java.util.UUID
 import javax.inject.Inject
@@ -278,7 +277,27 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
             }
             val services = gatt.services
             report("Servicios GATT encontrados: ${services.size}")
+            val bonded = try {
+                gatt.device.bondState == BluetoothDevice.BOND_BONDED
+            } catch (_: SecurityException) { false }
+            report(if (bonded) {
+                "Estado Android: Bluetooth vinculado. Sesión cifrada YpsoPump: aún no implementada."
+            } else {
+                "Estado Android: Bluetooth no vinculado. Sesión cifrada YpsoPump: no disponible."
+            })
             val found = services.flatMap { it.characteristics }.associateBy { it.uuid }
+            val authorizationUuid = UUID.fromString("669a0c20-0008-969e-e211-fcbeb2147bc5")
+            val authorization = found[authorizationUuid]
+            report(if (authorization == null) {
+                "Diagnóstico: característica de autorización del protocolo no encontrada."
+            } else {
+                val readable = authorization.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0
+                val writable = authorization.properties and (
+                    BluetoothGattCharacteristic.PROPERTY_WRITE or
+                    BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE
+                ) != 0
+                "Diagnóstico: característica de autorización presente (lectura: $readable, escritura: $writable). No se enviarán comandos."
+            })
             synchronized(pendingReads) {
                 pendingReads.clear()
                 YpsoBleUuids.readableCharacteristics.forEach { (uuid, label) ->
@@ -313,10 +332,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
     private fun handleRead(gatt: BluetoothGatt, uuid: UUID, bytes: ByteArray?, status: Int) {
         val label = YpsoBleUuids.readableCharacteristics[uuid] ?: "Característica"
         if (status == BluetoothGatt.GATT_SUCCESS && bytes != null) {
-            val isText = uuid in setOf(YpsoBleUuids.manufacturer, YpsoBleUuids.model,
-                YpsoBleUuids.serial, YpsoBleUuids.firmware, YpsoBleUuids.software)
-            val decoded = if (isText) String(bytes, StandardCharsets.UTF_8).trimEnd('\u0000')
-                else bytes.joinToString(".") { (it.toInt() and 255).toString() }
+            val decoded = YpsoBleUuids.formatReadOnlyValue(bytes)
             report("$label: $decoded")
         } else {
             report("No se pudo leer $label (GATT: $status)")
