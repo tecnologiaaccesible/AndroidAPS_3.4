@@ -8,12 +8,13 @@ package app.aaps.pump.ypsopump.auth
 class YpsoAuthSession(
     private val provider: AuthorizedExchangeProvider = UnavailableExchangeProvider,
     private val clockMillis: () -> Long,
-    private val sessionTtlMillis: Long = 15 * 60_000L
+    private val sessionTtlMillis: Long = 15 * 60_000L,
+    private val authorizationTimeoutMillis: Long = 30_000L
 ) {
-    init { require(sessionTtlMillis > 0) }
+    init { require(sessionTtlMillis > 0 && authorizationTimeoutMillis > 0) }
 
     enum class Status { DISCONNECTED, LINKED, AWAITING_AUTHORIZATION, AUTHORIZED_SIMULATION, EXPIRED, FAILED }
-    enum class Failure { PROVIDER_UNAVAILABLE, AUTHENTICATION_REJECTED, INVALID_SESSION, CLOCK_ROLLBACK }
+    enum class Failure { PROVIDER_UNAVAILABLE, AUTHENTICATION_REJECTED, INVALID_SESSION, CLOCK_ROLLBACK, AUTHORIZATION_TIMEOUT }
 
     data class State(
         val status: Status = Status.DISCONNECTED,
@@ -38,6 +39,10 @@ class YpsoAuthSession(
         val previous = lastClockMillis
         if (previous != null && now < previous) {
             snapshot = State(Status.FAILED, failure = Failure.CLOCK_ROLLBACK)
+        } else if (snapshot.status == Status.AWAITING_AUTHORIZATION &&
+            (snapshot.expiresAtMillis == null || now >= snapshot.expiresAtMillis!!)
+        ) {
+            snapshot = State(Status.FAILED, failure = Failure.AUTHORIZATION_TIMEOUT)
         } else if (snapshot.status == Status.AUTHORIZED_SIMULATION &&
             (snapshot.expiresAtMillis == null || now >= snapshot.expiresAtMillis!!)
         ) {
@@ -59,7 +64,12 @@ class YpsoAuthSession(
         } else if (!provider.available()) {
             snapshot = State(Status.FAILED, failure = Failure.PROVIDER_UNAVAILABLE)
         } else {
-            snapshot = State(Status.AWAITING_AUTHORIZATION)
+            val now = clockMillis()
+            snapshot = if (now > Long.MAX_VALUE - authorizationTimeoutMillis) {
+                State(Status.FAILED, failure = Failure.INVALID_SESSION)
+            } else {
+                State(Status.AWAITING_AUTHORIZATION, expiresAtMillis = now + authorizationTimeoutMillis)
+            }
         }
         return state()
     }
