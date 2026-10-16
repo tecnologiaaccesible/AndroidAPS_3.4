@@ -11,6 +11,8 @@ Esta aplicación Android se compila en el módulo `:ypsolab`. **No es la aplicac
 - Abre una conexión GATT y descubre los servicios disponibles.
 - Intenta leer, sin enviar escrituras, las características de identificación y versiones publicadas por la bomba.
 - Presenta los resultados en una interfaz sencilla con etiquetas para TalkBack.
+- Enumera los **UUID de todos los servicios y características GATT** y las propiedades anunciadas (lectura/escritura/notificaciones), **sin leer nuevos valores, suscribirse o enviar comandos**.
+- Incluye el botón **Copiar mapa GATT**, que copia únicamente metadatos técnicos, sin PIN, claves criptográficas, direcciones Bluetooth ni números de serie. El mapa aparece tras pulsar **Conectar para leer información**.
 
 **No incluye** control de bolos, basales, autenticación criptográfica a nivel de aplicación ni funciones de tratamiento. La vinculación Bluetooth de Android no autentica el protocolo cifrado YpsoPump. Algunas lecturas pueden requerir autenticación y fallar. El funcionamiento no está comprobado en una bomba real.
 
