@@ -1,6 +1,9 @@
 name: AAPS CI
 
 on:
+  push:
+    branches:
+      - ypsopump-lab-3.4.2.6
   workflow_dispatch:
     inputs:
       tagName:
@@ -210,7 +213,7 @@ jobs:
         run: |
           # jdk-map.json must be read before switching to the upstream tag,
           # as the upstream tag does not contain this file.
-          TAG="${{ github.event.inputs.tagName }}"
+          TAG="${{ github.event.inputs.tagName || '3.4.2.6' }}"
           JAVA_VERSION=$(jq -r '.default' .github/jdk-map.json)
           while IFS=$'\t' read -r pattern jdk; do
             if [[ "$TAG" == $pattern ]]; then
