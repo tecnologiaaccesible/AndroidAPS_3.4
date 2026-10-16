@@ -7,6 +7,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.SystemClock
+import app.aaps.pump.ypsopump.auth.YpsoAuthSession
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -25,6 +27,9 @@ class YpsoLabActivity : Activity() {
 
     private val ble by lazy { YpsoBleDiagnostics(applicationContext) }
     private val messages = ArrayDeque<String>()
+    private val authSession by lazy { YpsoAuthSession(clockMillis = SystemClock::elapsedRealtime) }
+    private var authStatus: TextView? = null
+    private var authCheckButton: Button? = null
     private var output: TextView? = null
     private var deviceList: LinearLayout? = null
     private var gattMapText: TextView? = null
@@ -69,6 +74,26 @@ class YpsoLabActivity : Activity() {
             text = getString(R.string.disconnect)
             setOnClickListener { ble.stopScan(); ble.disconnect() }
         })
+        body.addView(TextView(this).apply {
+            text = "Estado de la sesión YpsoPump"
+            textSize = 20f
+            setPadding(0, 16, 0, 8)
+        })
+        authStatus = TextView(this).apply {
+            textSize = 17f
+            text = "Bluetooth desconectado. Autenticación de la bomba no disponible."
+            accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        body.addView(authStatus)
+        authCheckButton = Button(this).apply {
+            text = "Comprobar disponibilidad de autenticación"
+            isEnabled = false
+            setOnClickListener {
+                val result = authSession.beginAuthentication()
+                updateAuthState(result)
+            }
+        }
+        body.addView(authCheckButton)
         body.addView(TextView(this).apply {
             text = getString(R.string.devices)
             textSize = 20f
@@ -158,12 +183,32 @@ class YpsoLabActivity : Activity() {
                 })
                 appendMessage("Bomba encontrada: $name ($shortAddress)")
             },
+            onLinkState = { connected ->
+                if (connected) authSession.connect() else authSession.disconnect()
+                updateAuthState(authSession.state())
+                authCheckButton?.isEnabled = connected
+            },
             onInventory = { inventory ->
                 gattInventory = inventory
                 gattMapText?.text = inventory
                 copyGattButton?.isEnabled = true
             }
         )
+    }
+
+    private fun updateAuthState(state: YpsoAuthSession.State) {
+        val description = when (state.status) {
+            YpsoAuthSession.Status.DISCONNECTED -> "Bluetooth desconectado."
+            YpsoAuthSession.Status.LINKED -> "Bluetooth conectado."
+            YpsoAuthSession.Status.AWAITING_AUTHORIZATION -> "Autorización pendiente (solo simulación)."
+            YpsoAuthSession.Status.AUTHORIZED_SIMULATION -> "Sesión simulada, sin permiso de control."
+            YpsoAuthSession.Status.EXPIRED -> "Sesión simulada caducada."
+            YpsoAuthSession.Status.FAILED -> when (state.failure) {
+                YpsoAuthSession.Failure.PROVIDER_UNAVAILABLE -> "No existe un proveedor de autenticación autorizado."
+                else -> "Autenticación no disponible: ${state.failure}."
+            }
+        }
+        authStatus?.text = "$description Autenticación real y control de insulina deshabilitados."
     }
 
     private fun clearGattInventory() {
@@ -201,6 +246,9 @@ class YpsoLabActivity : Activity() {
         ble.setListeners(null, null, null)
         ble.stopScan()
         ble.disconnect()
+        authSession.disconnect()
+        authCheckButton?.isEnabled = false
+        updateAuthState(authSession.state())
         super.onStop()
     }
 
@@ -209,6 +257,8 @@ class YpsoLabActivity : Activity() {
         output = null
         gattMapText = null
         copyGattButton = null
+        authStatus = null
+        authCheckButton = null
         super.onDestroy()
     }
 
