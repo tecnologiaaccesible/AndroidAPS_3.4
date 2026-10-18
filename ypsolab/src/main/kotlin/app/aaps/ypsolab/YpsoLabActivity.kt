@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.SystemClock
@@ -149,6 +150,35 @@ class YpsoLabActivity : Activity() {
             }
         }
         body.addView(copyGattButton)
+        body.addView(Button(this).apply {
+            text = "Compartir informe de laboratorio"
+            contentDescription = "Compartir informe de diagnóstico Bluetooth y mapa GATT"
+            setOnClickListener {
+                if (gattInventory.isBlank()) {
+                    Toast.makeText(this@YpsoLabActivity, "Conecta la bomba para obtener el mapa GATT", Toast.LENGTH_LONG).show()
+                } else {
+                    val report = buildString {
+                        appendLine("YpsoPump Lab - informe de laboratorio")
+                        appendLine("Solo diagnóstico; ninguna orden de administración de insulina.")
+                        appendLine()
+                        appendLine("REGISTRO")
+                        appendLine(messages.joinToString("\n"))
+                        appendLine()
+                        appendLine(gattInventory)
+                    }
+                    // Advertised device names can include a pump identifier: redact it.
+                    val redacted = report
+                        .replace(Regex("YpsoPump_[A-Za-z0-9]+"), "YpsoPump_[OCULTO]")
+                        .replace(Regex("\\([A-Fa-f0-9]{2}:[A-Fa-f0-9]{2}\\)"), "(XX:XX)")
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "YpsoPump Lab - informe")
+                        putExtra(Intent.EXTRA_TEXT, redacted)
+                    }
+                    startActivity(Intent.createChooser(intent, "Compartir informe de YpsoPump Lab"))
+                }
+            }
+        })
         gattMapText = TextView(this).apply {
             text = getString(R.string.gatt_map_waiting)
             textSize = 15f
