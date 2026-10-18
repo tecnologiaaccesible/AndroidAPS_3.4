@@ -15,6 +15,7 @@ import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.pump.ypsopump.ble.YpsoBleDiagnostics
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -31,6 +32,7 @@ class YpsoPumpPlugin @Inject constructor(
     rh: ResourceHelper,
     preferences: Preferences,
     commandQueue: CommandQueue,
+    private val bleDiagnostics: YpsoBleDiagnostics,
     private val results: Provider<PumpEnactResult>
 ) : PumpPluginBase(
     PluginDescription()
@@ -62,7 +64,8 @@ class YpsoPumpPlugin @Inject constructor(
     override fun isInitialized() = false
     override fun isSuspended() = true
     override fun isBusy() = true
-    override fun isConnected() = false
+    // BLE link state is observable, but initialization remains false until auth + status validation.
+    override fun isConnected() = bleDiagnostics.linkConnected
     override fun isConnecting() = false
     override fun isHandshakeInProgress() = false
     override fun connect(reason: String) = Unit
