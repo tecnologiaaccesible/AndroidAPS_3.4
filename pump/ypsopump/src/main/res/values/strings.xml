@@ -8,4 +8,6 @@
     <string name="ypsolab_results">Dispositivos encontrados</string>
     <string name="ypsolab_grant_permission">Concede los permisos de Bluetooth y vuelve a pulsar Buscar.</string>
     <string name="ypsolab_connect_to">Conectar con %1$s, identificador terminado en %2$s</string>
+    <string name="ypsopump_experimental">YpsoPump (experimental, sin administración)</string>
+    <string name="ypsopump_experimental_description">Controlador YpsoPump en desarrollo. Sin conexión autenticada ni administración de insulina.</string>
 </resources>
