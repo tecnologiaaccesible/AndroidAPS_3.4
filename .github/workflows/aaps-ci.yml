@@ -267,7 +267,7 @@ jobs:
       - name: Validate YpsoPump experimental module
         if: github.ref_name == 'ypsopump-lab-3.4.2.6'
         run: |
-          ./gradlew :pump:ypsopump:assembleFullDebug :pump:ypsopump:testFullDebugUnitTest :app:compileFullDebugKotlin :ypsolab:assembleFullDebug \
+          ./gradlew :pump:ypsopump:assembleFullDebug :pump:ypsopump:testFullDebugUnitTest :app:assembleFullDebug :ypsolab:assembleFullDebug \
             --no-daemon --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx6g -XX:+UseParallelGC"
 
@@ -317,6 +317,25 @@ jobs:
             exit 1
           fi
           echo "Verified isolated app identity: $PACKAGE_NAME"
+
+      - name: Verify experimental AndroidAPS debug APK
+        if: github.ref_name == 'ypsopump-lab-3.4.2.6'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/full/debug -maxdepth 1 -type f -name '*.apk' | head -n 1)
+          test -n "$APK" || { echo "::error::AndroidAPS fullDebug APK not found"; exit 1; }
+          echo "AndroidAPS fullDebug APK generated: $APK"
+          echo "IMPORTANT: The YpsoPump plugin is NOT registered for therapy use."
+
+      - name: Publish experimental AndroidAPS debug APK
+        if: github.ref_name == 'ypsopump-lab-3.4.2.6'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aaps-full-debug-ypsopump-research-not-for-therapy
+          path: app/build/outputs/apk/full/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Publish read-only YpsoPump Lab APK
         if: github.ref_name == 'ypsopump-lab-3.4.2.6'
