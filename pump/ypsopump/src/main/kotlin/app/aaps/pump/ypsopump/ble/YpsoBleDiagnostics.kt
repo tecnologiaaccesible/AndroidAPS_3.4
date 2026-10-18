@@ -37,6 +37,10 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
     private var connection: BluetoothGatt? = null
     private var bondSession: Int = 0
 
+    /** BLE transport state only; never implies pump authorization or insulin capability. */
+    @Volatile var linkConnected: Boolean = false
+        private set
+
     @Volatile private var eventListener: ((String) -> Unit)? = null
     @Volatile private var deviceListener: ((String, String) -> Unit)? = null
     @Volatile private var inventoryListener: ((String) -> Unit)? = null
@@ -247,6 +251,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun disconnect() {
+        linkConnected = false
         val gatt = connection
         connection = null
         synchronized(pendingReads) { pendingReads.clear() }
@@ -267,12 +272,14 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
+                linkConnected = true
                 mainHandler.post { linkListener?.invoke(true) }
                 report("Enlace BLE establecido. Descubriendo servicios.")
                 if (hasPermission(Manifest.permission.BLUETOOTH_CONNECT)) {
                     if (!gatt.discoverServices()) report("Falló el inicio del descubrimiento GATT.")
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
+                linkConnected = false
                 mainHandler.post { linkListener?.invoke(false) }
                 report("Conexión BLE terminada (estado $status).")
                 synchronized(pendingReads) { pendingReads.clear() }
