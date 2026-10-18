@@ -39,7 +39,11 @@ class YpsoPumpPlugin @Inject constructor(
         .pluginName(R.string.ypsopump_experimental)
         .shortName(R.string.ypsopump_experimental)
         .description(R.string.ypsopump_experimental_description),
-    logger, rh, preferences, commandQueue
+    ownPreferences = emptyList(),
+    aapsLogger = logger,
+    rh = rh,
+    preferences = preferences,
+    commandQueue = commandQueue
 ), Pump {
     override val pumpDescription: PumpDescription = PumpDescription().apply {
         isBolusCapable = false
