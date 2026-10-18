@@ -16,6 +16,7 @@ import app.aaps.core.interfaces.queue.CommandQueue
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.pump.ypsopump.ble.YpsoBleDiagnostics
+import app.aaps.pump.ypsopump.auth.YpsoPumpConnectionGate
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -47,6 +48,8 @@ class YpsoPumpPlugin @Inject constructor(
     preferences = preferences,
     commandQueue = commandQueue
 ), Pump {
+    private val authorizationGate = YpsoPumpConnectionGate()
+
     override val pumpDescription: PumpDescription = PumpDescription().apply {
         isBolusCapable = false
         isTempBasalCapable = false
@@ -61,17 +64,27 @@ class YpsoPumpPlugin @Inject constructor(
     override val batteryLevel: Int? = null
     override val isFakingTempsByExtendedBoluses: Boolean = false
 
-    override fun isInitialized() = false
+    override fun isInitialized() = authorizationGate.isPumpInitialized()
     override fun isSuspended() = true
     override fun isBusy() = true
     // BLE link state is observable, but initialization remains false until auth + status validation.
-    override fun isConnected() = bleDiagnostics.linkConnected
+    override fun isConnected(): Boolean {
+        val connected = bleDiagnostics.linkConnected
+        authorizationGate.updateBleLink(connected)
+        return connected
+    }
     override fun isConnecting() = false
     override fun isHandshakeInProgress() = false
     override fun connect(reason: String) = Unit
-    override fun disconnect(reason: String) = Unit
+    override fun disconnect(reason: String) {
+        authorizationGate.updateBleLink(false)
+        // This adapter cannot terminate the independent diagnostic UI's BLE session.
+    }
     override fun stopConnecting() = Unit
-    override fun getPumpStatus(reason: String) = Unit
+    override fun getPumpStatus(reason: String) {
+        authorizationGate.updateBleLink(bleDiagnostics.linkConnected)
+        // The authorized gateway is unavailable. Do not synthesize pump data.
+    }
 
     private fun blocked(): PumpEnactResult =
         results.get().success(false).enacted(false).comment("YpsoPump experimental: delivery disabled; authenticated transport not validated")
