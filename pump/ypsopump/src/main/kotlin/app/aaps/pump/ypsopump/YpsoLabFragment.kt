@@ -2,6 +2,9 @@ package app.aaps.pump.ypsopump
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -24,6 +27,8 @@ class YpsoLabFragment : DaggerFragment() {
 
     private var logText: TextView? = null
     private var deviceList: LinearLayout? = null
+    private var inventoryText: TextView? = null
+    private var inventory: String = ""
     private val messages = mutableListOf<String>()
 
     override fun onCreateView(
@@ -86,6 +91,23 @@ class YpsoLabFragment : DaggerFragment() {
             text = messages.joinToString("\n")
         }
         content.addView(logText)
+        content.addView(Button(context).apply {
+            text = "Copiar diagnóstico y mapa GATT"
+            contentDescription = "Copiar diagnóstico y mapa GATT de YpsoPump al portapapeles"
+            setOnClickListener {
+                val report = "YpsoPump AndroidAPS - solo lectura\\n" +
+                    messages.joinToString("\\n") + "\\n\\n" + inventory
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("YpsoPump - diagnóstico", report))
+                appendLog("Informe copiado al portapapeles.")
+            }
+        })
+        inventoryText = TextView(context).apply {
+            textSize = 15f
+            setTextIsSelectable(true)
+            text = "Mapa GATT: conecta la bomba para obtenerlo."
+        }
+        content.addView(inventoryText)
         return root
     }
 
@@ -102,6 +124,10 @@ class YpsoLabFragment : DaggerFragment() {
                     }
                     deviceList?.addView(button)
                 }
+            },
+            onInventory = { map ->
+                inventory = map
+                inventoryText?.text = map
             }
         )
     }
@@ -122,6 +148,7 @@ class YpsoLabFragment : DaggerFragment() {
     override fun onDestroyView() {
         logText = null
         deviceList = null
+        inventoryText = null
         super.onDestroyView()
     }
 }
