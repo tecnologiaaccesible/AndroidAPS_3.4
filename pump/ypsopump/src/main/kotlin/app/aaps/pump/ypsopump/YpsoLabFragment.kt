@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import app.aaps.pump.ypsopump.ble.YpsoBleDiagnostics
+import app.aaps.pump.ypsopump.auth.YpsoPumpConnectionGate
 import dagger.android.support.DaggerFragment
 import javax.inject.Inject
 
@@ -25,6 +26,7 @@ class YpsoLabFragment : DaggerFragment() {
 
     @Inject lateinit var ble: YpsoBleDiagnostics
 
+    private val authGate = YpsoPumpConnectionGate()
     private var logText: TextView? = null
     private var deviceList: LinearLayout? = null
     private var inventoryText: TextView? = null
@@ -69,10 +71,26 @@ class YpsoLabFragment : DaggerFragment() {
         })
 
         content.addView(Button(context).apply {
+            text = "Comprobar requisitos de autenticación (sin enviar comandos)"
+            contentDescription = "Comprobar enlace Bluetooth y disponibilidad de autorización segura"
+            setOnClickListener {
+                val state = authGate.updateBleLink(ble.linkConnected)
+                appendLog("Diagnóstico de sesión: $state")
+                if (ble.linkConnected) {
+                    appendLog("Resultado de autorización: ${authGate.tryAuthorization()}")
+                } else {
+                    appendLog("No hay enlace BLE. Conecta primero la bomba de laboratorio.")
+                }
+                appendLog("Sesión autenticada con YpsoPump: NO. Proveedor autorizado no configurado; no se envían solicitudes ni claves.")
+            }
+        })
+
+        content.addView(Button(context).apply {
             text = getString(R.string.ypsolab_disconnect)
             setOnClickListener {
                 ble.stopScan()
                 ble.disconnect()
+                authGate.updateBleLink(false)
             }
         })
 
@@ -125,6 +143,10 @@ class YpsoLabFragment : DaggerFragment() {
                     deviceList?.addView(button)
                 }
             },
+            onLinkState = { connected ->
+                authGate.updateBleLink(connected)
+                appendLog(if (connected) "BLE conectado; autenticación de aplicación pendiente." else "BLE desconectado; sesión invalidada.")
+            },
             onInventory = { map ->
                 inventory = map
                 inventoryText?.text = map
@@ -142,6 +164,7 @@ class YpsoLabFragment : DaggerFragment() {
         ble.setListeners(null, null)
         ble.stopScan()
         ble.disconnect()
+        authGate.updateBleLink(false)
         super.onStop()
     }
 
