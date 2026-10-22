@@ -38,4 +38,31 @@ class YpsoPumpConnectionGateTest {
         gate.updateBleLink(true)
         assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.tryAuthorization())
     }
+
+    @Test fun configurationExceptionFailsClosed() {
+        val gateway = object : AuthorizedAuthenticationGateway {
+            override fun isConfigured(): Boolean = error("simulated configuration failure")
+            override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.Unavailable
+        }
+        val gate = YpsoPumpConnectionGate(gateway)
+        gate.updateBleLink(true)
+        assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_UNAVAILABLE, gate.tryAuthorization())
+        assertFalse(gate.isPumpInitialized())
+        assertFalse(gate.mayAdministerInsulin())
+    }
+
+    @Test fun requestExceptionFailsClosedAndDisconnectResetsState() {
+        val gateway = object : AuthorizedAuthenticationGateway {
+            override fun isConfigured() = true
+            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result =
+                error("simulated authorization failure")
+        }
+        val gate = YpsoPumpConnectionGate(gateway)
+        gate.updateBleLink(true)
+        assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_UNAVAILABLE, gate.tryAuthorization())
+        assertFalse(gate.isPumpInitialized())
+        assertFalse(gate.mayAdministerInsulin())
+        assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.updateBleLink(false))
+        assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.tryAuthorization())
+    }
 }

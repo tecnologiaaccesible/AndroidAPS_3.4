@@ -23,10 +23,15 @@ class YpsoPumpConnectionGate(
     @Synchronized
     fun tryAuthorization(): State {
         if (!linked) return State.DISCONNECTED.also { status = it }
-        status = when {
-            !gateway.isConfigured() -> State.AUTHENTICATION_UNAVAILABLE
-            gateway.requestAuthorization() == AuthorizedAuthenticationGateway.Result.Rejected -> State.AUTHENTICATION_REJECTED
-            else -> State.AUTHENTICATION_UNAVAILABLE
+        // Provider failures must never interrupt diagnostics or establish trust.
+        status = try {
+            when {
+                !gateway.isConfigured() -> State.AUTHENTICATION_UNAVAILABLE
+                gateway.requestAuthorization() == AuthorizedAuthenticationGateway.Result.Rejected -> State.AUTHENTICATION_REJECTED
+                else -> State.AUTHENTICATION_UNAVAILABLE
+            }
+        } catch (_: Exception) {
+            State.AUTHENTICATION_UNAVAILABLE
         }
         return status
     }
