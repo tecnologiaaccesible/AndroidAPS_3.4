@@ -271,6 +271,12 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
     private val callback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            // Android can deliver callbacks after a user disconnects or changes device.
+            // A stale callback must never reactivate the diagnostic link or start reads.
+            if (connection !== gatt) {
+                gatt.close()
+                return
+            }
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                 linkConnected = true
                 mainHandler.post { linkListener?.invoke(true) }
@@ -290,6 +296,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
 
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (connection !== gatt || !linkConnected) return
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 report("No se pudieron descubrir los servicios: $status")
                 return
@@ -364,6 +371,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
     }
 
     private fun handleRead(gatt: BluetoothGatt, uuid: UUID, bytes: ByteArray?, status: Int) {
+        if (connection !== gatt || !linkConnected) return
         val label = YpsoBleUuids.readableCharacteristics[uuid] ?: "Característica"
         if (status == BluetoothGatt.GATT_SUCCESS && bytes != null) {
             val decoded = YpsoBleUuids.formatReadOnlyValue(bytes)
@@ -376,6 +384,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     private fun readNext(gatt: BluetoothGatt) {
+        if (connection !== gatt || !linkConnected) return
         val next = synchronized(pendingReads) {
             if (pendingReads.isEmpty()) null else pendingReads.removeFirst()
         }
