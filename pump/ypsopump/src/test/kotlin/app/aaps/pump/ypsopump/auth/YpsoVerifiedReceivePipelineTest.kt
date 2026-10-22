@@ -27,4 +27,20 @@ class YpsoVerifiedReceivePipelineTest {
         pipeline.invalidate()
         assertFalse(pipeline.accept("session-1", 2, byteArrayOf(1), byteArrayOf(1)))
     }
+
+    @Test fun verifierExceptionFailsClosedWithoutConsumingCounter() {
+        var shouldThrow = true
+        val verifier = object : YpsoVerifiedReceivePipeline.MessageAuthenticator {
+            override fun verify(sessionId: String, sequence: Long, payload: ByteArray, tag: ByteArray): Boolean {
+                if (shouldThrow) throw IllegalStateException("simulated verifier failure")
+                return true
+            }
+        }
+        val pipeline = YpsoVerifiedReceivePipeline(verifier)
+        pipeline.beginExternallyVerifiedSession("session-1")
+        assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
+        shouldThrow = false
+        assertTrue(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
+        assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
+    }
 }

@@ -44,7 +44,13 @@ class YpsoVerifiedReceivePipeline(
     @Synchronized
     fun accept(id: String, sequence: Long, payload: ByteArray, tag: ByteArray): Boolean {
         if (id.isBlank() || id != sessionId || sequence <= 0L || tag.isEmpty()) return false
-        if (!authenticator.verify(id, sequence, payload.copyOf(), tag.copyOf())) return false
+        // Verifier failures must never advance replay state or escape diagnostics.
+        val verified = try {
+            authenticator.verify(id, sequence, payload.copyOf(), tag.copyOf())
+        } catch (_: Exception) {
+            false
+        }
+        if (!verified) return false
         return sequenceGuard.acceptAuthenticatedCounter(id, sequence)
     }
 }
