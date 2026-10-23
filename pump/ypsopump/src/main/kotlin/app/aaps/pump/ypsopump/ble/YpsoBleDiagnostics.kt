@@ -33,6 +33,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
     private val devices = mutableMapOf<String, BluetoothDevice>()
     private val discovered = mutableSetOf<String>()
     private val pendingReads = ArrayDeque<Pair<String, BluetoothGattCharacteristic>>()
+    private val readResponseGate = YpsoGattReadResponseGate()
     private var scannerCallback: ScanCallback? = null
     private var connection: BluetoothGatt? = null
     private var bondSession: Int = 0
@@ -255,6 +256,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
         val gatt = connection
         connection = null
         synchronized(pendingReads) { pendingReads.clear() }
+        readResponseGate.reset()
         if (gatt != null) {
             try {
                 if (hasPermission(Manifest.permission.BLUETOOTH_CONNECT)) gatt.disconnect()
@@ -289,6 +291,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
                 mainHandler.post { linkListener?.invoke(false) }
                 report("Conexión BLE terminada (estado $status).")
                 synchronized(pendingReads) { pendingReads.clear() }
+                readResponseGate.reset()
                 if (connection === gatt) connection = null
                 gatt.close()
             }
@@ -339,6 +342,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
                 ) != 0
                 "Diagnóstico: característica de autorización presente (lectura: $readable, escritura: $writable). No se enviarán comandos."
             })
+            readResponseGate.reset()
             synchronized(pendingReads) {
                 pendingReads.clear()
                 YpsoBleUuids.readableCharacteristics.forEach { (uuid, label) ->
@@ -372,7 +376,10 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
 
     private fun handleRead(gatt: BluetoothGatt, uuid: UUID, bytes: ByteArray?, status: Int) {
         if (connection !== gatt || !linkConnected) return
-        val label = YpsoBleUuids.readableCharacteristics[uuid] ?: "Característica"
+        // Only the currently requested, allowlisted characteristic may be displayed.
+        // Ignore unsolicited, duplicate or late callbacks without exposing their payloads.
+        if (!readResponseGate.consume(uuid)) return
+        val label = YpsoBleUuids.readableCharacteristics[uuid] ?: return
         if (status == BluetoothGatt.GATT_SUCCESS && bytes != null) {
             val decoded = YpsoBleUuids.formatReadOnlyValue(bytes)
             report("$label: $decoded")
@@ -396,12 +403,18 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
             report("Permiso de conexión revocado.")
             return
         }
+        if (!readResponseGate.beginRead(next.second.uuid)) {
+            report("Lectura omitida: respuesta GATT anterior pendiente o UUID no permitida.")
+            return
+        }
         try {
             if (!gatt.readCharacteristic(next.second)) {
+                readResponseGate.reset()
                 report("No se pudo solicitar: ${next.first}")
                 readNext(gatt)
             }
         } catch (_: SecurityException) {
+            readResponseGate.reset()
             report("Lectura denegada por Android.")
         }
     }
