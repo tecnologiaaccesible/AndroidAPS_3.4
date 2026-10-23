@@ -58,10 +58,17 @@ class YpsoAuthSession(
         return state()
     }
 
+    /** Fail closed if an authorized provider is absent or throws unexpectedly. */
+    private fun providerIsAvailable(): Boolean = try {
+        provider.available()
+    } catch (_: Exception) {
+        false
+    }
+
     fun beginAuthentication(): State {
         if (state().status != Status.LINKED) {
             snapshot = State(Status.FAILED, failure = Failure.INVALID_SESSION)
-        } else if (!provider.available()) {
+        } else if (!providerIsAvailable()) {
             snapshot = State(Status.FAILED, failure = Failure.PROVIDER_UNAVAILABLE)
         } else {
             val now = clockMillis()

@@ -82,6 +82,38 @@ class YpsoAuthSessionTest {
         assertFalse(session.permitsPhysicalPumpOperation())
     }
 
+    @Test fun providerAvailabilityExceptionFailsClosed() {
+        val clock = FakeClock()
+        val provider = object : YpsoAuthSession.AuthorizedExchangeProvider {
+            override fun available(): Boolean = throw IllegalStateException("simulated provider failure")
+        }
+        val session = YpsoAuthSession(provider, clock::read)
+        session.connect()
+        val failure = session.beginAuthentication()
+        assertEquals(YpsoAuthSession.Status.FAILED, failure.status)
+        assertEquals(YpsoAuthSession.Failure.PROVIDER_UNAVAILABLE, failure.failure)
+        assertFalse(session.permitsPhysicalPumpOperation())
+    }
+
+    @Test fun providerRecoveryRequiresNewConnection() {
+        val clock = FakeClock()
+        var throwOnCheck = true
+        val provider = object : YpsoAuthSession.AuthorizedExchangeProvider {
+            override fun available(): Boolean {
+                if (throwOnCheck) throw IllegalStateException("simulated transient failure")
+                return true
+            }
+        }
+        val session = YpsoAuthSession(provider, clock::read)
+        session.connect()
+        assertEquals(YpsoAuthSession.Failure.PROVIDER_UNAVAILABLE, session.beginAuthentication().failure)
+        throwOnCheck = false
+        assertEquals(YpsoAuthSession.Failure.INVALID_SESSION, session.beginAuthentication().failure)
+        session.connect()
+        assertEquals(YpsoAuthSession.Status.AWAITING_AUTHORIZATION, session.beginAuthentication().status)
+        assertFalse(session.permitsPhysicalPumpOperation())
+    }
+
     @Test fun rejectsNonpositiveAuthorizationTimeout() {
         var rejected = false
         try {
