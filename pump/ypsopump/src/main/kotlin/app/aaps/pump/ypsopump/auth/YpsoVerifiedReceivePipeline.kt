@@ -22,10 +22,15 @@ class YpsoVerifiedReceivePipeline(
 
     private val sequenceGuard = YpsoAuthenticatedSequenceGuard()
     private var sessionId: String? = null
+    // A pipeline must not reset a previously accepted receive counter.
+    // Each independently verified cryptographic session needs a fresh pipeline.
+    private var sessionEverStarted = false
 
     @Synchronized
     fun beginExternallyVerifiedSession(id: String) {
         require(id.isNotBlank())
+        check(!sessionEverStarted) { "Receive pipeline is single-use; create a new instance for each verified session" }
+        sessionEverStarted = true
         sequenceGuard.invalidate()
         sessionId = id
         sequenceGuard.beginVerifiedSession(id)

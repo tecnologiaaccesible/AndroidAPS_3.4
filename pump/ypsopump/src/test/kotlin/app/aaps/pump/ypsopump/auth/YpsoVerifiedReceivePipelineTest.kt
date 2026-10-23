@@ -106,4 +106,39 @@ class YpsoVerifiedReceivePipelineTest {
         assertFalse(pipeline.accept("session-1", 0, payload, tag))
     }
 
+
+    @Test fun verifiedSessionCannotBeRestartedToResetReplayCounter() {
+        val verifier = object : YpsoVerifiedReceivePipeline.MessageAuthenticator {
+            override fun verify(sessionId: String, sequence: Long, payload: ByteArray, tag: ByteArray) = true
+        }
+        val pipeline = YpsoVerifiedReceivePipeline(verifier)
+        val payload = byteArrayOf(1)
+        val tag = byteArrayOf(2)
+        pipeline.beginExternallyVerifiedSession("session-1")
+        assertTrue(pipeline.accept("session-1", 7L, payload, tag))
+        var rejected = false
+        try {
+            pipeline.beginExternallyVerifiedSession("session-1")
+        } catch (_: IllegalStateException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+        assertFalse(pipeline.accept("session-1", 7L, payload, tag))
+        assertTrue(pipeline.accept("session-1", 8L, payload, tag))
+
+        pipeline.invalidate()
+        rejected = false
+        try {
+            pipeline.beginExternallyVerifiedSession("session-2")
+        } catch (_: IllegalStateException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+        assertFalse(pipeline.accept("session-2", 1L, payload, tag))
+
+        // The caller must independently verify unique session/key binding.
+        val freshPipeline = YpsoVerifiedReceivePipeline(verifier)
+        freshPipeline.beginExternallyVerifiedSession("session-2")
+        assertTrue(freshPipeline.accept("session-2", 1L, payload, tag))
+    }
 }
