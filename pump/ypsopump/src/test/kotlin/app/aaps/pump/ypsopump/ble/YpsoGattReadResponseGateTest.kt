@@ -7,7 +7,9 @@ import java.util.UUID
 
 class YpsoGattReadResponseGateTest {
     @Test fun onlyRequestedCharacteristicCanBeConsumedOnce() {
-        val gate = YpsoGattReadResponseGate()
+        val gate = YpsoGattReadResponseGate().apply {
+            configureAllowedReads(YpsoBleUuids.readableCharacteristics.keys)
+        }
         assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
         assertFalse(gate.consume(YpsoBleUuids.model))
         assertTrue(gate.consume(YpsoBleUuids.manufacturer))
@@ -15,7 +17,9 @@ class YpsoGattReadResponseGateTest {
     }
 
     @Test fun rejectsProtectedOrUnknownCharacteristic() {
-        val gate = YpsoGattReadResponseGate()
+        val gate = YpsoGattReadResponseGate().apply {
+            configureAllowedReads(YpsoBleUuids.readableCharacteristics.keys)
+        }
         val authorization = UUID.fromString("669a0c20-0008-969e-e211-fcbeb2147bc5")
         assertFalse(gate.beginRead(authorization))
         assertFalse(gate.consume(authorization))
@@ -23,7 +27,9 @@ class YpsoGattReadResponseGateTest {
     }
 
     @Test fun resetRejectsLateCallbackAfterDisconnect() {
-        val gate = YpsoGattReadResponseGate()
+        val gate = YpsoGattReadResponseGate().apply {
+            configureAllowedReads(YpsoBleUuids.readableCharacteristics.keys)
+        }
         assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
         gate.reset()
         assertFalse(gate.consume(YpsoBleUuids.manufacturer))
@@ -32,7 +38,9 @@ class YpsoGattReadResponseGateTest {
     }
 
     @Test fun permitsOnlyOneInFlightRead() {
-        val gate = YpsoGattReadResponseGate()
+        val gate = YpsoGattReadResponseGate().apply {
+            configureAllowedReads(YpsoBleUuids.readableCharacteristics.keys)
+        }
         assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
         assertFalse(gate.beginRead(YpsoBleUuids.model))
         assertTrue(gate.consume(YpsoBleUuids.manufacturer))
@@ -40,7 +48,9 @@ class YpsoGattReadResponseGateTest {
     }
 
     @Test fun expiredReadRejectsLateResponse() {
-        val gate = YpsoGattReadResponseGate()
+        val gate = YpsoGattReadResponseGate().apply {
+            configureAllowedReads(YpsoBleUuids.readableCharacteristics.keys)
+        }
         assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
         val request = gate.currentReadId()!!
         assertTrue(gate.expire(request))
@@ -49,7 +59,9 @@ class YpsoGattReadResponseGateTest {
     }
 
     @Test fun oldTimeoutCannotCancelNextRead() {
-        val gate = YpsoGattReadResponseGate()
+        val gate = YpsoGattReadResponseGate().apply {
+            configureAllowedReads(YpsoBleUuids.readableCharacteristics.keys)
+        }
         assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
         val first = gate.currentReadId()!!
         assertTrue(gate.consume(YpsoBleUuids.manufacturer))
@@ -61,7 +73,9 @@ class YpsoGattReadResponseGateTest {
     }
 
     @Test fun resetInvalidatesOldTimeoutEvenForSameUuid() {
-        val gate = YpsoGattReadResponseGate()
+        val gate = YpsoGattReadResponseGate().apply {
+            configureAllowedReads(YpsoBleUuids.readableCharacteristics.keys)
+        }
         assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
         val old = gate.currentReadId()!!
         gate.reset()
@@ -73,7 +87,9 @@ class YpsoGattReadResponseGateTest {
     }
 
     @Test fun noTimeoutTokenAfterCallbackOrReset() {
-        val gate = YpsoGattReadResponseGate()
+        val gate = YpsoGattReadResponseGate().apply {
+            configureAllowedReads(YpsoBleUuids.readableCharacteristics.keys)
+        }
         assertTrue(gate.beginRead(YpsoBleUuids.model))
         assertTrue(gate.consume(YpsoBleUuids.model))
         assertTrue(gate.currentReadId() == null)
@@ -81,4 +97,40 @@ class YpsoGattReadResponseGateTest {
         gate.reset()
         assertTrue(gate.currentReadId() == null)
     }
+    @Test fun noReadsAreAllowedBeforeInventoryConfigurationOrAfterReset() {
+        val gate = YpsoGattReadResponseGate()
+        assertFalse(gate.beginRead(YpsoBleUuids.manufacturer))
+        gate.configureAllowedReads(setOf(YpsoBleUuids.manufacturer))
+        assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
+        gate.reset()
+        assertFalse(gate.beginRead(YpsoBleUuids.manufacturer))
+        gate.configureAllowedReads(setOf(YpsoBleUuids.model))
+        assertFalse(gate.beginRead(YpsoBleUuids.manufacturer))
+        assertTrue(gate.beginRead(YpsoBleUuids.model))
+    }
+
+    @Test fun inventoryCannotGrantUnknownOrProtectedCharacteristic() {
+        val gate = YpsoGattReadResponseGate()
+        val protectedUuid = UUID.fromString("669a0c20-0008-969e-e211-fcbeb2147bc5")
+        gate.configureAllowedReads(setOf(YpsoBleUuids.firmware, protectedUuid))
+        assertFalse(gate.beginRead(protectedUuid))
+        assertFalse(gate.beginRead(YpsoBleUuids.serial))
+        assertTrue(gate.beginRead(YpsoBleUuids.firmware))
+    }
+
+    @Test fun inventoryCannotChangeDuringPendingRead() {
+        val gate = YpsoGattReadResponseGate()
+        gate.configureAllowedReads(setOf(YpsoBleUuids.model))
+        assertTrue(gate.beginRead(YpsoBleUuids.model))
+        var rejected = false
+        try {
+            gate.configureAllowedReads(setOf(YpsoBleUuids.serial))
+        } catch (_: IllegalStateException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+        assertTrue(gate.consume(YpsoBleUuids.model))
+        assertFalse(gate.beginRead(YpsoBleUuids.serial))
+    }
+
 }

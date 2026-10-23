@@ -9,14 +9,23 @@ import java.util.UUID
  */
 internal class YpsoGattReadResponseGate {
     private var expectedUuid: UUID? = null
+    // Empty until a verified, unambiguous GATT inventory explicitly grants reads.
+    private var eligibleReads: Set<UUID> = emptySet()
     // Monotonic per-instance request IDs prevent an old timeout from
     // cancelling a newer read of the same characteristic after reconnect.
     private var lastReadId = 0L
     private var pendingReadId: Long? = null
 
+    /** Only characteristics selected from the current GATT inventory are readable. */
+    @Synchronized
+    fun configureAllowedReads(discoveredEligible: Set<UUID>) {
+        check(expectedUuid == null) { "Cannot change diagnostic allowlist during a pending read" }
+        eligibleReads = discoveredEligible.intersect(YpsoBleUuids.readableCharacteristics.keys)
+    }
+
     @Synchronized
     fun beginRead(uuid: UUID): Boolean {
-        if (expectedUuid != null || uuid !in YpsoBleUuids.readableCharacteristics ||
+        if (expectedUuid != null || uuid !in eligibleReads ||
             lastReadId == Long.MAX_VALUE) return false
         lastReadId++
         expectedUuid = uuid
@@ -49,5 +58,6 @@ internal class YpsoGattReadResponseGate {
     fun reset() {
         expectedUuid = null
         pendingReadId = null
+        eligibleReads = emptySet()
     }
 }

@@ -355,6 +355,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
                 "Diagnóstico: característica de autorización presente (lectura: $readable, escritura: $writable). No se enviarán comandos."
             })
             readResponseGate.reset()
+            readResponseGate.configureAllowedReads(eligibleReads)
             synchronized(pendingReads) {
                 pendingReads.clear()
                 YpsoBleUuids.readableCharacteristics.forEach { (uuid, label) ->
