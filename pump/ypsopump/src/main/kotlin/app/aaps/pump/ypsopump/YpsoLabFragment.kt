@@ -74,9 +74,10 @@ class YpsoLabFragment : DaggerFragment() {
             text = "Comprobar requisitos de autenticación (sin enviar comandos)"
             contentDescription = "Comprobar enlace Bluetooth y disponibilidad de autorización segura"
             setOnClickListener {
-                val state = authGate.updateBleLink(ble.linkConnected)
+                val link = ble.linkSnapshot()
+                val state = authGate.updateBleLink(link.connected, link.identity)
                 appendLog("Diagnóstico de sesión: $state")
-                if (ble.linkConnected) {
+                if (link.connected) {
                     appendLog("Resultado de autorización: ${authGate.tryAuthorization()}")
                 } else {
                     appendLog("No hay enlace BLE. Conecta primero la bomba de laboratorio.")
@@ -90,7 +91,7 @@ class YpsoLabFragment : DaggerFragment() {
             setOnClickListener {
                 ble.stopScan()
                 ble.disconnect()
-                authGate.updateBleLink(false)
+                authGate.updateBleLink(false, null)
             }
         })
 
@@ -143,9 +144,10 @@ class YpsoLabFragment : DaggerFragment() {
                     deviceList?.addView(button)
                 }
             },
-            onLinkState = { connected ->
-                authGate.updateBleLink(connected)
-                appendLog(if (connected) "BLE conectado; autenticación de aplicación pendiente." else "BLE desconectado; sesión invalidada.")
+            onLinkState = { _ ->
+                val link = ble.linkSnapshot()
+                authGate.updateBleLink(link.connected, link.identity)
+                appendLog(if (link.connected) "BLE conectado; autenticación de aplicación pendiente." else "BLE desconectado; sesión invalidada.")
             },
             onInventory = { map ->
                 inventory = map
@@ -164,7 +166,7 @@ class YpsoLabFragment : DaggerFragment() {
         ble.setListeners(null, null)
         ble.stopScan()
         ble.disconnect()
-        authGate.updateBleLink(false)
+        authGate.updateBleLink(false, null)
         super.onStop()
     }
 
