@@ -2,6 +2,10 @@ package app.aaps.pump.ypsopump.auth
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.Test
 
 class YpsoAuthSessionTest {
@@ -132,5 +136,64 @@ class YpsoAuthSessionTest {
             rejected = true
         }
         assertEquals(true, rejected)
+    }
+
+    @Test fun disconnectDuringProviderCheckCannotReviveSession() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val provider = object : YpsoAuthSession.AuthorizedExchangeProvider {
+            override fun available(): Boolean {
+                entered.countDown()
+                return release.await(5, TimeUnit.SECONDS)
+            }
+        }
+        val session = YpsoAuthSession(provider, FakeClock()::read)
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            session.connect()
+            val pending = executor.submit<YpsoAuthSession.State> { session.beginAuthentication() }
+            assertTrue("Provider was not reached", entered.await(5, TimeUnit.SECONDS))
+            assertEquals(YpsoAuthSession.Status.DISCONNECTED, session.disconnect().status)
+            release.countDown()
+            assertEquals(YpsoAuthSession.Status.DISCONNECTED, pending.get(5, TimeUnit.SECONDS).status)
+            assertEquals(YpsoAuthSession.Status.DISCONNECTED, session.state().status)
+            assertFalse(session.permitsPhysicalPumpOperation())
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test fun staleProviderCheckCannotAuthorizeReplacementLink() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        var calls = 0
+        val provider = object : YpsoAuthSession.AuthorizedExchangeProvider {
+            override fun available(): Boolean {
+                synchronized(this) { calls++ }
+                if (calls == 1) {
+                    entered.countDown()
+                    return release.await(5, TimeUnit.SECONDS)
+                }
+                return true
+            }
+        }
+        val session = YpsoAuthSession(provider, FakeClock()::read)
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            session.connect()
+            val pending = executor.submit<YpsoAuthSession.State> { session.beginAuthentication() }
+            assertTrue("Provider was not reached", entered.await(5, TimeUnit.SECONDS))
+            session.disconnect()
+            assertEquals(YpsoAuthSession.Status.LINKED, session.connect().status)
+            release.countDown()
+            assertEquals(YpsoAuthSession.Status.LINKED, pending.get(5, TimeUnit.SECONDS).status)
+            assertEquals(YpsoAuthSession.Status.LINKED, session.state().status)
+            assertEquals(YpsoAuthSession.Status.AWAITING_AUTHORIZATION, session.beginAuthentication().status)
+            assertFalse(session.permitsPhysicalPumpOperation())
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
+        }
     }
 }
