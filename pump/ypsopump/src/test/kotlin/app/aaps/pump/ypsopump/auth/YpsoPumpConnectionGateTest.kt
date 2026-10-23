@@ -262,4 +262,86 @@ class YpsoPumpConnectionGateTest {
             pool.shutdownNow()
         }
     }
+
+    @Test fun concurrentAuthorizationAttemptsIssueOnlyOneProviderRequestPerLink() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val calls = AtomicInteger()
+        val gateway = object : AuthorizedAuthenticationGateway {
+            override fun isConfigured() = true
+            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result {
+                calls.incrementAndGet()
+                entered.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                return AuthorizedAuthenticationGateway.Result.Rejected
+            }
+        }
+        val gate = YpsoPumpConnectionGate(gateway)
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            gate.updateBleLink(true, testLink)
+            val pending = pool.submit<YpsoPumpConnectionGate.State> { gate.tryAuthorization() }
+            assertTrue("Provider request did not start", entered.await(3, TimeUnit.SECONDS))
+            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.tryAuthorization())
+            assertEquals("A duplicate provider request was started", 1, calls.get())
+            release.countDown()
+            assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, pending.get(5, TimeUnit.SECONDS))
+            // A completed request does not permanently prevent an explicit retry.
+            assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.tryAuthorization())
+            assertEquals(2, calls.get())
+            assertFalse(gate.isPumpConnected())
+            assertFalse(gate.mayAdministerInsulin())
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+        }
+    }
+
+    @Test fun staleProviderCompletionCannotUnlockPendingRequestOnReplacementLink() {
+        val firstEntered = CountDownLatch(1)
+        val secondEntered = CountDownLatch(1)
+        val firstRelease = CountDownLatch(1)
+        val secondRelease = CountDownLatch(1)
+        val calls = AtomicInteger()
+        val gateway = object : AuthorizedAuthenticationGateway {
+            override fun isConfigured() = true
+            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result {
+                when (calls.incrementAndGet()) {
+                    1 -> {
+                        firstEntered.countDown()
+                        firstRelease.await(5, TimeUnit.SECONDS)
+                    }
+                    2 -> {
+                        secondEntered.countDown()
+                        secondRelease.await(5, TimeUnit.SECONDS)
+                    }
+                    else -> error("Unexpected duplicate provider request")
+                }
+                return AuthorizedAuthenticationGateway.Result.Rejected
+            }
+        }
+        val gate = YpsoPumpConnectionGate(gateway)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            gate.updateBleLink(true, testLink)
+            val oldRequest = pool.submit<YpsoPumpConnectionGate.State> { gate.tryAuthorization() }
+            assertTrue(firstEntered.await(3, TimeUnit.SECONDS))
+            gate.updateBleLink(true, Any())
+            val newRequest = pool.submit<YpsoPumpConnectionGate.State> { gate.tryAuthorization() }
+            assertTrue(secondEntered.await(3, TimeUnit.SECONDS))
+            firstRelease.countDown()
+            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, oldRequest.get(5, TimeUnit.SECONDS))
+            // The old callback must not release the new link's in-flight guard.
+            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.tryAuthorization())
+            assertEquals(2, calls.get())
+            secondRelease.countDown()
+            assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, newRequest.get(5, TimeUnit.SECONDS))
+            assertFalse(gate.isPumpInitialized())
+            assertFalse(gate.mayAdministerInsulin())
+        } finally {
+            firstRelease.countDown()
+            secondRelease.countDown()
+            pool.shutdownNow()
+        }
+    }
 }

@@ -18,6 +18,10 @@ class YpsoPumpConnectionGate(
     // Link transitions and newer requests invalidate callbacks from older requests.
     // An identity token cannot wrap around and is not an authentication credential.
     private var requestToken: Any = Any()
+    // A manufacturer authorization challenge must not be started twice in parallel
+    // for the same GATT link. Replaced links may start independently while old
+    // requests are still unwinding; their callbacks remain token-isolated.
+    private var authorizationInFlight = false
 
     @Synchronized
     fun updateBleLink(connected: Boolean, identity: Any?): State {
@@ -27,6 +31,7 @@ class YpsoPumpConnectionGate(
         val validLink = connected && identity != null
         if (linked == validLink && (!validLink || linkIdentity === identity)) return status
         requestToken = Any()
+        authorizationInFlight = false
         linked = validLink
         linkIdentity = if (validLink) identity else null
         status = if (validLink) State.LINKED_UNAUTHENTICATED else State.DISCONNECTED
@@ -39,6 +44,10 @@ class YpsoPumpConnectionGate(
                 status = State.DISCONNECTED
                 return status
             }
+            // Coalesce repeated UI requests while a provider operation is pending.
+            // In particular, do not issue concurrent authentication challenges.
+            if (authorizationInFlight) return status
+            authorizationInFlight = true
             Any().also { requestToken = it }
         }
         // Do not hold the BLE link lock while invoking a potentially slow
@@ -55,7 +64,10 @@ class YpsoPumpConnectionGate(
         return synchronized(this) {
             // Never apply a stale result to a disconnected or replacement link,
             // nor let an older request overwrite the newer provider outcome.
-            if (linked && requestToken === expectedToken) status = result
+            if (linked && requestToken === expectedToken) {
+                authorizationInFlight = false
+                status = result
+            }
             status
         }
     }
