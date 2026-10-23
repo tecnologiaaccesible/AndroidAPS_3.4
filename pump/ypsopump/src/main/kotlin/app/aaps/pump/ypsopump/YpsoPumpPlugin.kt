@@ -67,11 +67,10 @@ class YpsoPumpPlugin @Inject constructor(
     override fun isInitialized() = authorizationGate.isPumpInitialized()
     override fun isSuspended() = true
     override fun isBusy() = true
-    // BLE link state is observable, but initialization remains false until auth + status validation.
+    // Diagnostic BLE connectivity is not authenticated therapeutic connectivity.
     override fun isConnected(): Boolean {
-        val connected = bleDiagnostics.linkConnected
-        authorizationGate.updateBleLink(connected)
-        return connected
+        authorizationGate.updateBleLink(bleDiagnostics.linkConnected)
+        return authorizationGate.isPumpConnected()
     }
     override fun isConnecting() = false
     override fun isHandshakeInProgress() = false

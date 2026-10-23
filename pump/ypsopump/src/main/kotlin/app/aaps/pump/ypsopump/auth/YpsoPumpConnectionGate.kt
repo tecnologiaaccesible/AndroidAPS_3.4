@@ -18,6 +18,9 @@ class YpsoPumpConnectionGate(
 
     @Synchronized
     fun updateBleLink(connected: Boolean): State {
+        // Repeated polling must not invalidate an in-flight provider check.
+        // Only an actual BLE link transition resets authorization state.
+        if (linked == connected) return status
         requestToken = Any()
         linked = connected
         status = if (connected) State.LINKED_UNAUTHENTICATED else State.DISCONNECTED
@@ -56,5 +59,7 @@ class YpsoPumpConnectionGate(
 
     /** Even a provider acknowledgement does not establish a validated pump session. */
     fun isPumpInitialized(): Boolean = false
+    /** A diagnostic BLE link is not a validated AAPS pump connection. */
+    fun isPumpConnected(): Boolean = false
     fun mayAdministerInsulin(): Boolean = false
 }

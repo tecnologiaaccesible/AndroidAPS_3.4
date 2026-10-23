@@ -166,4 +166,49 @@ class YpsoPumpConnectionGateTest {
             pool.shutdownNow()
         }
     }
+
+    @Test fun repeatedBlePollingPreservesRejectionAndNeverReportsTherapeuticConnection() {
+        val gateway = object : AuthorizedAuthenticationGateway {
+            override fun isConfigured() = true
+            override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.Rejected
+        }
+        val gate = YpsoPumpConnectionGate(gateway)
+        assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.updateBleLink(true))
+        assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.tryAuthorization())
+        repeat(3) {
+            assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.updateBleLink(true))
+            assertFalse(gate.isPumpConnected())
+            assertFalse(gate.isPumpInitialized())
+            assertFalse(gate.mayAdministerInsulin())
+        }
+        assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.updateBleLink(false))
+        assertFalse(gate.isPumpConnected())
+    }
+
+    @Test fun repeatedBlePollingDoesNotInvalidatePendingAuthorizationCheck() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val gateway = object : AuthorizedAuthenticationGateway {
+            override fun isConfigured() = true
+            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result {
+                entered.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                return AuthorizedAuthenticationGateway.Result.Rejected
+            }
+        }
+        val gate = YpsoPumpConnectionGate(gateway)
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            gate.updateBleLink(true)
+            val pending = pool.submit<YpsoPumpConnectionGate.State> { gate.tryAuthorization() }
+            assertTrue("Provider was not reached", entered.await(5, TimeUnit.SECONDS))
+            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.updateBleLink(true))
+            release.countDown()
+            assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, pending.get(5, TimeUnit.SECONDS))
+            assertFalse(gate.isPumpConnected())
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+        }
+    }
 }
