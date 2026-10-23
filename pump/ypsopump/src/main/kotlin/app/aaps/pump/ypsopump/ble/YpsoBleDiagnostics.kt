@@ -34,6 +34,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
     private val discovered = mutableSetOf<String>()
     private val pendingReads = ArrayDeque<Pair<String, BluetoothGattCharacteristic>>()
     private val readResponseGate = YpsoGattReadResponseGate()
+    private val discoveryGate = YpsoGattDiscoveryGate()
     private var scannerCallback: ScanCallback? = null
     @Volatile private var connection: BluetoothGatt? = null
     private var bondSession: Int = 0
@@ -257,6 +258,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
         connection = null
         synchronized(pendingReads) { pendingReads.clear() }
         readResponseGate.reset()
+        discoveryGate.resetForNewLink()
         if (gatt != null) {
             try {
                 if (hasPermission(Manifest.permission.BLUETOOTH_CONNECT)) gatt.disconnect()
@@ -292,6 +294,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
                 report("Conexión BLE terminada (estado $status).")
                 synchronized(pendingReads) { pendingReads.clear() }
                 readResponseGate.reset()
+                discoveryGate.resetForNewLink()
                 if (connection === gatt) connection = null
                 gatt.close()
             }
@@ -302,6 +305,12 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
             if (connection !== gatt || !linkConnected) return
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 report("No se pudieron descubrir los servicios: $status")
+                return
+            }
+            // Never reset the active read allowlist on a duplicate callback.
+            // A new discovery is permitted only after disconnect/new GATT link.
+            if (!discoveryGate.claimSuccessfulDiscovery()) {
+                report("Descubrimiento GATT duplicado ignorado en este enlace.")
                 return
             }
             val services = gatt.services
