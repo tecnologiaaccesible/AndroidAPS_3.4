@@ -33,6 +33,9 @@ class YpsoGattReadResponseGateTest {
         assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
         gate.reset()
         assertFalse(gate.consume(YpsoBleUuids.manufacturer))
+        assertFalse(gate.beginRead(YpsoBleUuids.model))
+        // Re-discovery of the current GATT inventory is required after reset.
+        gate.configureAllowedReads(setOf(YpsoBleUuids.model))
         assertTrue(gate.beginRead(YpsoBleUuids.model))
         assertTrue(gate.consume(YpsoBleUuids.model))
     }
@@ -79,6 +82,8 @@ class YpsoGattReadResponseGateTest {
         assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
         val old = gate.currentReadId()!!
         gate.reset()
+        assertFalse(gate.beginRead(YpsoBleUuids.manufacturer))
+        gate.configureAllowedReads(setOf(YpsoBleUuids.manufacturer))
         assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
         val fresh = gate.currentReadId()!!
         assertTrue(fresh > old)
