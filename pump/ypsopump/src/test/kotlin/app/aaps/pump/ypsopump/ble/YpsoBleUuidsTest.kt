@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.UUID
 
 class YpsoBleUuidsTest {
     @Test fun acceptsResearchDeviceNameVariants() {
@@ -27,6 +28,40 @@ class YpsoBleUuidsTest {
     @Test fun preservesUnexpectedBinaryDataAsNumbers() {
         assertEquals("Sin datos", YpsoBleUuids.formatReadOnlyValue(byteArrayOf()))
         assertEquals("0.255.10", YpsoBleUuids.formatReadOnlyValue(byteArrayOf(0, -1, 10)))
+    }
+
+    @Test fun standardDeviceInfoRequiresCorrectService() {
+        val candidate = YpsoBleUuids.DiscoveredCharacteristic(
+            YpsoBleUuids.deviceInformationService, YpsoBleUuids.manufacturer, true
+        )
+        assertEquals(setOf(YpsoBleUuids.manufacturer), YpsoBleUuids.eligibleDiagnosticReads(listOf(candidate)))
+        assertTrue(
+            YpsoBleUuids.eligibleDiagnosticReads(
+                listOf(candidate.copy(serviceUuid = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")))
+            ).isEmpty()
+        )
+    }
+
+    @Test fun duplicateUuidOrNonReadableCharacteristicIsNeverSelected() {
+        val candidate = YpsoBleUuids.DiscoveredCharacteristic(
+            YpsoBleUuids.deviceInformationService, YpsoBleUuids.firmware, true
+        )
+        assertTrue(YpsoBleUuids.eligibleDiagnosticReads(listOf(candidate, candidate)).isEmpty())
+        assertTrue(
+            YpsoBleUuids.eligibleDiagnosticReads(listOf(candidate.copy(supportsRead = false))).isEmpty()
+        )
+        assertTrue(
+            YpsoBleUuids.eligibleDiagnosticReads(
+                listOf(candidate, candidate.copy(serviceUuid = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")))
+            ).isEmpty()
+        )
+    }
+
+    @Test fun uniqueReadableVendorVersionRemainsAvailableWithoutAssumingService() {
+        val candidate = YpsoBleUuids.DiscoveredCharacteristic(
+            UUID.fromString("12345678-1234-1234-1234-123456789abc"), YpsoBleUuids.masterVersion, true
+        )
+        assertEquals(setOf(YpsoBleUuids.masterVersion), YpsoBleUuids.eligibleDiagnosticReads(listOf(candidate)))
     }
 
     @Test fun allReadOnlyCharacteristicsHaveDistinctIdentifiers() {

@@ -18,6 +18,33 @@ object YpsoBleUuids {
     val settingsVersion = UUID.fromString("669a0c20-0008-969e-e211-fcbee33b7bc5")
     val historyVersion = UUID.fromString("669a0c20-0008-969e-e211-fcbee43b7bc5")
 
+    /** Bluetooth SIG Device Information service (0x180A). */
+    val deviceInformationService = UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb")
+
+    data class DiscoveredCharacteristic(
+        val serviceUuid: UUID,
+        val characteristicUuid: UUID,
+        val supportsRead: Boolean
+    )
+
+    private val standardDeviceInformation = setOf(manufacturer, model, serial, firmware, software)
+
+    /**
+     * Select only unambiguous, readable diagnostics. Standard Device Information
+     * characteristics must actually belong to service 0x180A; vendor version
+     * characteristics remain service-agnostic until verified against hardware.
+     * A duplicated UUID anywhere in the inventory is rejected, not arbitrarily
+     * resolved with associateBy().
+     */
+    fun eligibleDiagnosticReads(discovered: List<DiscoveredCharacteristic>): Set<UUID> {
+        val grouped = discovered.groupBy { it.characteristicUuid }
+        return readableCharacteristics.keys.filterTo(linkedSetOf()) { uuid ->
+            val candidate = grouped[uuid]?.singleOrNull() ?: return@filterTo false
+            candidate.supportsRead &&
+                (uuid !in standardDeviceInformation || candidate.serviceUuid == deviceInformationService)
+        }
+    }
+
     val readableCharacteristics = linkedMapOf(
         manufacturer to "Fabricante",
         model to "Modelo",

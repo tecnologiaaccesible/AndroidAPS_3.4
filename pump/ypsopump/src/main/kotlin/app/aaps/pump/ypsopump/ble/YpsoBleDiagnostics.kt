@@ -330,6 +330,18 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
                 "Estado Android: Bluetooth no vinculado. Sesión cifrada YpsoPump: no disponible."
             })
             val found = services.flatMap { it.characteristics }.associateBy { it.uuid }
+            val eligibleReads = YpsoBleUuids.eligibleDiagnosticReads(
+                services.flatMap { service ->
+                    service.characteristics.map { characteristic ->
+                        YpsoBleUuids.DiscoveredCharacteristic(
+                            serviceUuid = service.uuid,
+                            characteristicUuid = characteristic.uuid,
+                            supportsRead = characteristic.properties and
+                                BluetoothGattCharacteristic.PROPERTY_READ != 0
+                        )
+                    }
+                }
+            )
             val authorizationUuid = UUID.fromString("669a0c20-0008-969e-e211-fcbeb2147bc5")
             val authorization = found[authorizationUuid]
             report(if (authorization == null) {
@@ -347,7 +359,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
                 pendingReads.clear()
                 YpsoBleUuids.readableCharacteristics.forEach { (uuid, label) ->
                     val characteristic = found[uuid]
-                    if (characteristic != null &&
+                    if (characteristic != null && uuid in eligibleReads &&
                         characteristic.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0
                     ) pendingReads.addLast(label to characteristic)
                 }
