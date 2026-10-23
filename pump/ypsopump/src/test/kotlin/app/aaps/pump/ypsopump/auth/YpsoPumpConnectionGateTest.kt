@@ -157,10 +157,18 @@ class YpsoPumpConnectionGateTest {
             gate.updateBleLink(true, testLink)
             val older = pool.submit<YpsoPumpConnectionGate.State> { gate.tryAuthorization() }
             assertTrue("First request was not reached", entered.await(5, TimeUnit.SECONDS))
+            // The same-link duplicate must be coalesced, not sent to the provider.
+            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.tryAuthorization())
+            assertEquals(1, calls.get())
+            // A replacement GATT link invalidates the pending first response and
+            // allows an independent authorization request for the new link.
+            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.updateBleLink(true, Any()))
             assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.tryAuthorization())
+            assertEquals(2, calls.get())
             release.countDown()
             assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, older.get(5, TimeUnit.SECONDS))
             assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.currentState())
+            assertFalse(gate.isPumpConnected())
             assertFalse(gate.mayAdministerInsulin())
         } finally {
             release.countDown()
