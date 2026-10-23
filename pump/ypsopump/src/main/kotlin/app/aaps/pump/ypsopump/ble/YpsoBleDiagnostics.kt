@@ -35,7 +35,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
     private val pendingReads = ArrayDeque<Pair<String, BluetoothGattCharacteristic>>()
     private val readResponseGate = YpsoGattReadResponseGate()
     private var scannerCallback: ScanCallback? = null
-    private var connection: BluetoothGatt? = null
+    @Volatile private var connection: BluetoothGatt? = null
     private var bondSession: Int = 0
 
     /** BLE transport state only; never implies pump authorization or insulin capability. */
@@ -407,11 +407,22 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
             report("Lectura omitida: respuesta GATT anterior pendiente o UUID no permitida.")
             return
         }
+        // Capture the request identity before Android can deliver its callback.
+        val readId = readResponseGate.currentReadId() ?: return
         try {
             if (!gatt.readCharacteristic(next.second)) {
                 readResponseGate.reset()
                 report("No se pudo solicitar: ${next.first}")
                 readNext(gatt)
+            } else {
+                mainHandler.postDelayed({
+                    if (connection === gatt && linkConnected && readResponseGate.expire(readId)) {
+                        // A missing callback leaves the read queue stalled. Close the link
+                        // instead of accepting a potentially late response on a new read.
+                        report("Tiempo de espera GATT agotado; cerrando diagnóstico de solo lectura.")
+                        disconnect()
+                    }
+                }, 8_000L)
             }
         } catch (_: SecurityException) {
             readResponseGate.reset()

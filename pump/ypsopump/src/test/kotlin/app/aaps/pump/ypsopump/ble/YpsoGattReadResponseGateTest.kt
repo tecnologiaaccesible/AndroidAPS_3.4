@@ -38,4 +38,47 @@ class YpsoGattReadResponseGateTest {
         assertTrue(gate.consume(YpsoBleUuids.manufacturer))
         assertTrue(gate.beginRead(YpsoBleUuids.model))
     }
+
+    @Test fun expiredReadRejectsLateResponse() {
+        val gate = YpsoGattReadResponseGate()
+        assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
+        val request = gate.currentReadId()!!
+        assertTrue(gate.expire(request))
+        assertFalse(gate.consume(YpsoBleUuids.manufacturer))
+        assertFalse(gate.expire(request))
+    }
+
+    @Test fun oldTimeoutCannotCancelNextRead() {
+        val gate = YpsoGattReadResponseGate()
+        assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
+        val first = gate.currentReadId()!!
+        assertTrue(gate.consume(YpsoBleUuids.manufacturer))
+        assertTrue(gate.beginRead(YpsoBleUuids.model))
+        val second = gate.currentReadId()!!
+        assertFalse(gate.expire(first))
+        assertTrue(second > first)
+        assertTrue(gate.consume(YpsoBleUuids.model))
+    }
+
+    @Test fun resetInvalidatesOldTimeoutEvenForSameUuid() {
+        val gate = YpsoGattReadResponseGate()
+        assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
+        val old = gate.currentReadId()!!
+        gate.reset()
+        assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
+        val fresh = gate.currentReadId()!!
+        assertTrue(fresh > old)
+        assertFalse(gate.expire(old))
+        assertTrue(gate.consume(YpsoBleUuids.manufacturer))
+    }
+
+    @Test fun noTimeoutTokenAfterCallbackOrReset() {
+        val gate = YpsoGattReadResponseGate()
+        assertTrue(gate.beginRead(YpsoBleUuids.model))
+        assertTrue(gate.consume(YpsoBleUuids.model))
+        assertTrue(gate.currentReadId() == null)
+        assertTrue(gate.beginRead(YpsoBleUuids.firmware))
+        gate.reset()
+        assertTrue(gate.currentReadId() == null)
+    }
 }
