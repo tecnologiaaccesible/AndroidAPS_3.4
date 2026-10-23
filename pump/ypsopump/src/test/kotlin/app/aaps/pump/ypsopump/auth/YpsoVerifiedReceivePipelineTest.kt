@@ -7,9 +7,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class YpsoVerifiedReceivePipelineTest {
+    private val link = Any()
+    private var liveLink: Any? = link
     @Test fun defaultAlwaysRejects() {
-        val pipeline = YpsoVerifiedReceivePipeline()
-        pipeline.beginExternallyVerifiedSession("session-1")
+        val pipeline = YpsoVerifiedReceivePipeline(currentLinkIdentity = { liveLink })
+        pipeline.beginExternallyVerifiedSession("session-1", link)
         assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
     }
 
@@ -18,8 +20,8 @@ class YpsoVerifiedReceivePipelineTest {
         val verifier = object : YpsoVerifiedReceivePipeline.MessageAuthenticator {
             override fun verify(sessionId: String, sequence: Long, payload: ByteArray, tag: ByteArray) = verified
         }
-        val pipeline = YpsoVerifiedReceivePipeline(verifier)
-        pipeline.beginExternallyVerifiedSession("session-1")
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
+        pipeline.beginExternallyVerifiedSession("session-1", link)
         assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
         verified = true
         assertTrue(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
@@ -38,8 +40,8 @@ class YpsoVerifiedReceivePipelineTest {
                 return true
             }
         }
-        val pipeline = YpsoVerifiedReceivePipeline(verifier)
-        pipeline.beginExternallyVerifiedSession("session-1")
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
+        pipeline.beginExternallyVerifiedSession("session-1", link)
         assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
         shouldThrow = false
         assertTrue(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
@@ -53,11 +55,11 @@ class YpsoVerifiedReceivePipelineTest {
                 return true
             }
         }
-        val pipeline = YpsoVerifiedReceivePipeline(verifier)
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
         val payload = byteArrayOf(1)
         val tag = byteArrayOf(2)
         assertFalse(pipeline.accept("session-1", 1, payload, tag)) // No active session
-        pipeline.beginExternallyVerifiedSession("session-1")
+        pipeline.beginExternallyVerifiedSession("session-1", link)
         assertFalse(pipeline.accept("", 1, payload, tag))
         assertFalse(pipeline.accept("session-2", 1, payload, tag))
         assertFalse(pipeline.accept("session-1", 0, payload, tag))
@@ -83,8 +85,8 @@ class YpsoVerifiedReceivePipelineTest {
                 return true
             }
         }
-        val pipeline = YpsoVerifiedReceivePipeline(verifier)
-        pipeline.beginExternallyVerifiedSession("session-1")
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
+        pipeline.beginExternallyVerifiedSession("session-1", link)
         assertTrue(pipeline.accept("session-1", 1, payload, tag))
         assertArrayEquals(byteArrayOf(1, 2, 3), payload)
         assertArrayEquals(byteArrayOf(4, 5, 6), tag)
@@ -94,8 +96,8 @@ class YpsoVerifiedReceivePipelineTest {
         val verifier = object : YpsoVerifiedReceivePipeline.MessageAuthenticator {
             override fun verify(sessionId: String, sequence: Long, payload: ByteArray, tag: ByteArray) = true
         }
-        val pipeline = YpsoVerifiedReceivePipeline(verifier)
-        pipeline.beginExternallyVerifiedSession("session-1")
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
+        pipeline.beginExternallyVerifiedSession("session-1", link)
         val payload = byteArrayOf(1)
         val tag = byteArrayOf(1)
         assertTrue(pipeline.accept("session-1", Long.MAX_VALUE - 1, payload, tag))
@@ -111,14 +113,14 @@ class YpsoVerifiedReceivePipelineTest {
         val verifier = object : YpsoVerifiedReceivePipeline.MessageAuthenticator {
             override fun verify(sessionId: String, sequence: Long, payload: ByteArray, tag: ByteArray) = true
         }
-        val pipeline = YpsoVerifiedReceivePipeline(verifier)
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
         val payload = byteArrayOf(1)
         val tag = byteArrayOf(2)
-        pipeline.beginExternallyVerifiedSession("session-1")
+        pipeline.beginExternallyVerifiedSession("session-1", link)
         assertTrue(pipeline.accept("session-1", 7L, payload, tag))
         var rejected = false
         try {
-            pipeline.beginExternallyVerifiedSession("session-1")
+            pipeline.beginExternallyVerifiedSession("session-1", link)
         } catch (_: IllegalStateException) {
             rejected = true
         }
@@ -129,7 +131,7 @@ class YpsoVerifiedReceivePipelineTest {
         pipeline.invalidate()
         rejected = false
         try {
-            pipeline.beginExternallyVerifiedSession("session-2")
+            pipeline.beginExternallyVerifiedSession("session-2", link)
         } catch (_: IllegalStateException) {
             rejected = true
         }
@@ -137,8 +139,70 @@ class YpsoVerifiedReceivePipelineTest {
         assertFalse(pipeline.accept("session-2", 1L, payload, tag))
 
         // The caller must independently verify unique session/key binding.
-        val freshPipeline = YpsoVerifiedReceivePipeline(verifier)
-        freshPipeline.beginExternallyVerifiedSession("session-2")
+        val freshPipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
+        freshPipeline.beginExternallyVerifiedSession("session-2", link)
         assertTrue(freshPipeline.accept("session-2", 1L, payload, tag))
+    }
+
+    @Test fun missingTrustedLinkSourceCannotArmSession() {
+        val pipeline = YpsoVerifiedReceivePipeline()
+        var rejected = false
+        try {
+            pipeline.beginExternallyVerifiedSession("session-1", link)
+        } catch (_: IllegalStateException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+        assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
+    }
+
+    @Test fun replacementGattIdentityPermanentlyInvalidatesOfflineReceiveSession() {
+        val verifier = object : YpsoVerifiedReceivePipeline.MessageAuthenticator {
+            override fun verify(sessionId: String, sequence: Long, payload: ByteArray, tag: ByteArray) = true
+        }
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
+        pipeline.beginExternallyVerifiedSession("session-1", link)
+        assertTrue(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
+        liveLink = Any()
+        assertFalse(pipeline.accept("session-1", 2, byteArrayOf(1), byteArrayOf(1)))
+        liveLink = link
+        assertFalse(pipeline.accept("session-1", 2, byteArrayOf(1), byteArrayOf(1)))
+        var rejected = false
+        try {
+            pipeline.beginExternallyVerifiedSession("session-1", link)
+        } catch (_: IllegalStateException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+    }
+
+    @Test fun disconnectDuringAuthenticatorCallNeverAcceptsMessage() {
+        val verifier = object : YpsoVerifiedReceivePipeline.MessageAuthenticator {
+            override fun verify(sessionId: String, sequence: Long, payload: ByteArray, tag: ByteArray): Boolean {
+                liveLink = null
+                return true
+            }
+        }
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
+        pipeline.beginExternallyVerifiedSession("session-1", link)
+        assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
+        liveLink = link
+        assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
+    }
+
+    @Test fun linkIdentityProviderFailureInvalidatesOfflineReceiveSession() {
+        var fail = false
+        val verifier = object : YpsoVerifiedReceivePipeline.MessageAuthenticator {
+            override fun verify(sessionId: String, sequence: Long, payload: ByteArray, tag: ByteArray) = true
+        }
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = {
+            if (fail) error("simulated link state failure")
+            liveLink
+        })
+        pipeline.beginExternallyVerifiedSession("session-1", link)
+        fail = true
+        assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
+        fail = false
+        assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
     }
 }
