@@ -10,15 +10,16 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Test
 
 class YpsoPumpConnectionGateTest {
+    private val testLink = Any()
     @Test fun bluetoothAloneNeverAuthorizes() {
         val gate = YpsoPumpConnectionGate()
         assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.currentState())
-        gate.updateBleLink(true)
+        gate.updateBleLink(true, testLink)
         assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.currentState())
         assertFalse(gate.isPumpInitialized())
         assertFalse(gate.mayAdministerInsulin())
         assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_UNAVAILABLE, gate.tryAuthorization())
-        gate.updateBleLink(false)
+        gate.updateBleLink(false, null)
         assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.currentState())
     }
 
@@ -28,7 +29,7 @@ class YpsoPumpConnectionGateTest {
             override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.AuthorizedByProvider
         }
         val gate = YpsoPumpConnectionGate(gateway)
-        gate.updateBleLink(true)
+        gate.updateBleLink(true, testLink)
         assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_UNAVAILABLE, gate.tryAuthorization())
         assertFalse(gate.isPumpInitialized())
         assertFalse(gate.mayAdministerInsulin())
@@ -40,7 +41,7 @@ class YpsoPumpConnectionGateTest {
             override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.Rejected
         }
         val gate = YpsoPumpConnectionGate(gateway)
-        gate.updateBleLink(true)
+        gate.updateBleLink(true, testLink)
         assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.tryAuthorization())
     }
 
@@ -50,7 +51,7 @@ class YpsoPumpConnectionGateTest {
             override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.Unavailable
         }
         val gate = YpsoPumpConnectionGate(gateway)
-        gate.updateBleLink(true)
+        gate.updateBleLink(true, testLink)
         assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_UNAVAILABLE, gate.tryAuthorization())
         assertFalse(gate.isPumpInitialized())
         assertFalse(gate.mayAdministerInsulin())
@@ -63,11 +64,11 @@ class YpsoPumpConnectionGateTest {
                 error("simulated authorization failure")
         }
         val gate = YpsoPumpConnectionGate(gateway)
-        gate.updateBleLink(true)
+        gate.updateBleLink(true, testLink)
         assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_UNAVAILABLE, gate.tryAuthorization())
         assertFalse(gate.isPumpInitialized())
         assertFalse(gate.mayAdministerInsulin())
-        assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.updateBleLink(false))
+        assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.updateBleLink(false, null))
         assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.tryAuthorization())
     }
 
@@ -85,10 +86,10 @@ class YpsoPumpConnectionGateTest {
         val gate = YpsoPumpConnectionGate(gateway)
         val pool = Executors.newFixedThreadPool(2)
         try {
-            gate.updateBleLink(true)
+            gate.updateBleLink(true, testLink)
             val pending = pool.submit<YpsoPumpConnectionGate.State> { gate.tryAuthorization() }
             assertTrue("Gateway was not reached", entered.await(5, TimeUnit.SECONDS))
-            val disconnect = pool.submit<YpsoPumpConnectionGate.State> { gate.updateBleLink(false) }
+            val disconnect = pool.submit<YpsoPumpConnectionGate.State> { gate.updateBleLink(false, null) }
             assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, disconnect.get(2, TimeUnit.SECONDS))
             release.countDown()
             assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, pending.get(5, TimeUnit.SECONDS))
@@ -114,16 +115,16 @@ class YpsoPumpConnectionGateTest {
         val gate = YpsoPumpConnectionGate(gateway)
         val pool = Executors.newFixedThreadPool(2)
         try {
-            gate.updateBleLink(true)
+            gate.updateBleLink(true, testLink)
             val pending = pool.submit<YpsoPumpConnectionGate.State> { gate.tryAuthorization() }
             assertTrue("Gateway was not reached", entered.await(5, TimeUnit.SECONDS))
             assertEquals(
                 YpsoPumpConnectionGate.State.DISCONNECTED,
-                pool.submit<YpsoPumpConnectionGate.State> { gate.updateBleLink(false) }.get(2, TimeUnit.SECONDS)
+                pool.submit<YpsoPumpConnectionGate.State> { gate.updateBleLink(false, null) }.get(2, TimeUnit.SECONDS)
             )
             assertEquals(
                 YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED,
-                pool.submit<YpsoPumpConnectionGate.State> { gate.updateBleLink(true) }.get(2, TimeUnit.SECONDS)
+                pool.submit<YpsoPumpConnectionGate.State> { gate.updateBleLink(true, testLink) }.get(2, TimeUnit.SECONDS)
             )
             release.countDown()
             assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, pending.get(5, TimeUnit.SECONDS))
@@ -153,7 +154,7 @@ class YpsoPumpConnectionGateTest {
         val gate = YpsoPumpConnectionGate(gateway)
         val pool = Executors.newSingleThreadExecutor()
         try {
-            gate.updateBleLink(true)
+            gate.updateBleLink(true, testLink)
             val older = pool.submit<YpsoPumpConnectionGate.State> { gate.tryAuthorization() }
             assertTrue("First request was not reached", entered.await(5, TimeUnit.SECONDS))
             assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.tryAuthorization())
@@ -173,15 +174,15 @@ class YpsoPumpConnectionGateTest {
             override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.Rejected
         }
         val gate = YpsoPumpConnectionGate(gateway)
-        assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.updateBleLink(true))
+        assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.updateBleLink(true, testLink))
         assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.tryAuthorization())
         repeat(3) {
-            assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.updateBleLink(true))
+            assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.updateBleLink(true, testLink))
             assertFalse(gate.isPumpConnected())
             assertFalse(gate.isPumpInitialized())
             assertFalse(gate.mayAdministerInsulin())
         }
-        assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.updateBleLink(false))
+        assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.updateBleLink(false, null))
         assertFalse(gate.isPumpConnected())
     }
 
@@ -199,13 +200,63 @@ class YpsoPumpConnectionGateTest {
         val gate = YpsoPumpConnectionGate(gateway)
         val pool = Executors.newSingleThreadExecutor()
         try {
-            gate.updateBleLink(true)
+            gate.updateBleLink(true, testLink)
             val pending = pool.submit<YpsoPumpConnectionGate.State> { gate.tryAuthorization() }
             assertTrue("Provider was not reached", entered.await(5, TimeUnit.SECONDS))
-            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.updateBleLink(true))
+            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.updateBleLink(true, testLink))
             release.countDown()
             assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, pending.get(5, TimeUnit.SECONDS))
             assertFalse(gate.isPumpConnected())
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+        }
+    }
+
+    @Test fun missingLinkIdentityFailsClosed() {
+        val gate = YpsoPumpConnectionGate()
+        assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.updateBleLink(true, null))
+        assertEquals(YpsoPumpConnectionGate.State.DISCONNECTED, gate.tryAuthorization())
+        assertFalse(gate.isPumpConnected())
+        assertFalse(gate.mayAdministerInsulin())
+    }
+
+    @Test fun replacementIdentityInvalidatesPriorRejectionWithoutDisconnectedPoll() {
+        val gateway = object : AuthorizedAuthenticationGateway {
+            override fun isConfigured() = true
+            override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.Rejected
+        }
+        val gate = YpsoPumpConnectionGate(gateway)
+        gate.updateBleLink(true, testLink)
+        assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.tryAuthorization())
+        assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_REJECTED, gate.updateBleLink(true, testLink))
+        assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.updateBleLink(true, Any()))
+        assertFalse(gate.isPumpConnected())
+        assertFalse(gate.mayAdministerInsulin())
+    }
+
+    @Test fun oldProviderResultCannotAffectReplacementIdentityWithoutDisconnectedPoll() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val gateway = object : AuthorizedAuthenticationGateway {
+            override fun isConfigured() = true
+            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result {
+                entered.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                return AuthorizedAuthenticationGateway.Result.Rejected
+            }
+        }
+        val gate = YpsoPumpConnectionGate(gateway)
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            gate.updateBleLink(true, testLink)
+            val oldRequest = pool.submit<YpsoPumpConnectionGate.State> { gate.tryAuthorization() }
+            assertTrue("Provider was not reached", entered.await(5, TimeUnit.SECONDS))
+            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.updateBleLink(true, Any()))
+            release.countDown()
+            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, oldRequest.get(5, TimeUnit.SECONDS))
+            assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.currentState())
+            assertFalse(gate.mayAdministerInsulin())
         } finally {
             release.countDown()
             pool.shutdownNow()

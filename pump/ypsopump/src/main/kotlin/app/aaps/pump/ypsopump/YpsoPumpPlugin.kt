@@ -69,19 +69,21 @@ class YpsoPumpPlugin @Inject constructor(
     override fun isBusy() = true
     // Diagnostic BLE connectivity is not authenticated therapeutic connectivity.
     override fun isConnected(): Boolean {
-        authorizationGate.updateBleLink(bleDiagnostics.linkConnected)
+        val link = bleDiagnostics.linkSnapshot()
+        authorizationGate.updateBleLink(link.connected, link.identity)
         return authorizationGate.isPumpConnected()
     }
     override fun isConnecting() = false
     override fun isHandshakeInProgress() = false
     override fun connect(reason: String) = Unit
     override fun disconnect(reason: String) {
-        authorizationGate.updateBleLink(false)
+        authorizationGate.updateBleLink(false, null)
         // This adapter cannot terminate the independent diagnostic UI's BLE session.
     }
     override fun stopConnecting() = Unit
     override fun getPumpStatus(reason: String) {
-        authorizationGate.updateBleLink(bleDiagnostics.linkConnected)
+        val link = bleDiagnostics.linkSnapshot()
+        authorizationGate.updateBleLink(link.connected, link.identity)
         // The authorized gateway is unavailable. Do not synthesize pump data.
     }
 

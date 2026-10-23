@@ -11,19 +11,25 @@ class YpsoPumpConnectionGate(
     enum class State { DISCONNECTED, LINKED_UNAUTHENTICATED, AUTHENTICATION_UNAVAILABLE, AUTHENTICATION_REJECTED }
 
     private var linked = false
+    // An opaque transport identity changes on each actual GATT connection.
+    // It is not an authentication credential and must never grant pump control.
+    private var linkIdentity: Any? = null
     @Volatile private var status = State.DISCONNECTED
     // Link transitions and newer requests invalidate callbacks from older requests.
     // An identity token cannot wrap around and is not an authentication credential.
     private var requestToken: Any = Any()
 
     @Synchronized
-    fun updateBleLink(connected: Boolean): State {
-        // Repeated polling must not invalidate an in-flight provider check.
-        // Only an actual BLE link transition resets authorization state.
-        if (linked == connected) return status
+    fun updateBleLink(connected: Boolean, identity: Any?): State {
+        // A missing identity is not a valid diagnostic link. A replacement GATT
+        // connection invalidates old provider responses even if polling never
+        // observed a disconnected interval.
+        val validLink = connected && identity != null
+        if (linked == validLink && (!validLink || linkIdentity === identity)) return status
         requestToken = Any()
-        linked = connected
-        status = if (connected) State.LINKED_UNAUTHENTICATED else State.DISCONNECTED
+        linked = validLink
+        linkIdentity = if (validLink) identity else null
+        status = if (validLink) State.LINKED_UNAUTHENTICATED else State.DISCONNECTED
         return status
     }
 

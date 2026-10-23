@@ -40,8 +40,13 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
     private var bondSession: Int = 0
 
     /** BLE transport state only; never implies pump authorization or insulin capability. */
-    @Volatile var linkConnected: Boolean = false
-        private set
+    data class LinkSnapshot(val connected: Boolean, val identity: Any?)
+
+    // Read connectivity and identity atomically: separate volatile reads could
+    // accidentally combine the old link's identity with the new link's state.
+    @Volatile private var currentLink = LinkSnapshot(false, null)
+    val linkConnected: Boolean get() = currentLink.connected
+    fun linkSnapshot(): LinkSnapshot = currentLink
 
     @Volatile private var eventListener: ((String) -> Unit)? = null
     @Volatile private var deviceListener: ((String, String) -> Unit)? = null
@@ -253,7 +258,7 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun disconnect() {
-        linkConnected = false
+        currentLink = LinkSnapshot(false, null)
         val gatt = connection
         connection = null
         synchronized(pendingReads) { pendingReads.clear() }
@@ -282,14 +287,14 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
                 return
             }
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
-                linkConnected = true
+                if (!currentLink.connected) currentLink = LinkSnapshot(true, Any())
                 mainHandler.post { linkListener?.invoke(true) }
                 report("Enlace BLE establecido. Descubriendo servicios.")
                 if (hasPermission(Manifest.permission.BLUETOOTH_CONNECT)) {
                     if (!gatt.discoverServices()) report("Falló el inicio del descubrimiento GATT.")
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
-                linkConnected = false
+                currentLink = LinkSnapshot(false, null)
                 mainHandler.post { linkListener?.invoke(false) }
                 report("Conexión BLE terminada (estado $status).")
                 synchronized(pendingReads) { pendingReads.clear() }
