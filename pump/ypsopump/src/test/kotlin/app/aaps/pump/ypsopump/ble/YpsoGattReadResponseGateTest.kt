@@ -138,4 +138,22 @@ class YpsoGattReadResponseGateTest {
         assertFalse(gate.beginRead(YpsoBleUuids.serial))
     }
 
+
+    @Test fun inventoryCannotBeReplacedWithoutReset() {
+        val gate = YpsoGattReadResponseGate()
+        gate.configureAllowedReads(setOf(YpsoBleUuids.manufacturer))
+        var rejected = false
+        try {
+            gate.configureAllowedReads(setOf(YpsoBleUuids.model))
+        } catch (_: IllegalStateException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+        assertFalse(gate.beginRead(YpsoBleUuids.model))
+        assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
+        assertTrue(gate.consume(YpsoBleUuids.manufacturer))
+        gate.reset()
+        gate.configureAllowedReads(setOf(YpsoBleUuids.model))
+        assertTrue(gate.beginRead(YpsoBleUuids.model))
+    }
 }

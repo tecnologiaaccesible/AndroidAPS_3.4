@@ -11,6 +11,8 @@ internal class YpsoGattReadResponseGate {
     private var expectedUuid: UUID? = null
     // Empty until a verified, unambiguous GATT inventory explicitly grants reads.
     private var eligibleReads: Set<UUID> = emptySet()
+    // Inventory is immutable for the lifetime of this GATT discovery session.
+    private var inventoryConfigured = false
     // Monotonic per-instance request IDs prevent an old timeout from
     // cancelling a newer read of the same characteristic after reconnect.
     private var lastReadId = 0L
@@ -20,7 +22,9 @@ internal class YpsoGattReadResponseGate {
     @Synchronized
     fun configureAllowedReads(discoveredEligible: Set<UUID>) {
         check(expectedUuid == null) { "Cannot change diagnostic allowlist during a pending read" }
+        check(!inventoryConfigured) { "Diagnostic inventory already configured; reset before rediscovery" }
         eligibleReads = discoveredEligible.intersect(YpsoBleUuids.readableCharacteristics.keys)
+        inventoryConfigured = true
     }
 
     @Synchronized
@@ -59,5 +63,6 @@ internal class YpsoGattReadResponseGate {
         expectedUuid = null
         pendingReadId = null
         eligibleReads = emptySet()
+        inventoryConfigured = false
     }
 }
