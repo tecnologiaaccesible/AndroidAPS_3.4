@@ -5,6 +5,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class YpsoVerifiedReceivePipelineTest {
     private val link = Any()
@@ -203,6 +207,72 @@ class YpsoVerifiedReceivePipelineTest {
         fail = true
         assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
         fail = false
+        assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
+    }
+
+    @Test fun disconnectDoesNotWaitForBlockedAuthenticatorAndRejectsLateSuccess() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val finished = CountDownLatch(1)
+        val disconnected = CountDownLatch(1)
+        val accepted = AtomicBoolean(true)
+        val verifier = object : YpsoVerifiedReceivePipeline.MessageAuthenticator {
+            override fun verify(sessionId: String, sequence: Long, payload: ByteArray, tag: ByteArray): Boolean {
+                entered.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                return true
+            }
+        }
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
+        pipeline.beginExternallyVerifiedSession("session-1", link)
+        val receiver = Thread {
+            try { accepted.set(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1))) }
+            finally { finished.countDown() }
+        }
+        val disconnector = Thread {
+            try { pipeline.invalidate() }
+            finally { disconnected.countDown() }
+        }
+        receiver.start()
+        try {
+            assertTrue("Verifier never started", entered.await(3, TimeUnit.SECONDS))
+            disconnector.start()
+            assertTrue("Disconnect blocked behind verifier", disconnected.await(2, TimeUnit.SECONDS))
+        } finally {
+            release.countDown()
+            receiver.join(3000)
+            if (disconnector.state != Thread.State.NEW) disconnector.join(3000)
+        }
+        assertTrue(finished.await(3, TimeUnit.SECONDS))
+        assertFalse("Stale verifier success was accepted", accepted.get())
+        assertFalse(pipeline.accept("session-1", 2, byteArrayOf(1), byteArrayOf(1)))
+    }
+
+    @Test fun simultaneousAuthenticatedDuplicatesAdvanceCounterOnlyOnce() {
+        val bothEntered = CountDownLatch(2)
+        val release = CountDownLatch(1)
+        val accepted = AtomicInteger(0)
+        val verifier = object : YpsoVerifiedReceivePipeline.MessageAuthenticator {
+            override fun verify(sessionId: String, sequence: Long, payload: ByteArray, tag: ByteArray): Boolean {
+                bothEntered.countDown()
+                return release.await(5, TimeUnit.SECONDS)
+            }
+        }
+        val pipeline = YpsoVerifiedReceivePipeline(verifier, currentLinkIdentity = { liveLink })
+        pipeline.beginExternallyVerifiedSession("session-1", link)
+        val threads = (1..2).map {
+            Thread {
+                if (pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1))) accepted.incrementAndGet()
+            }
+        }
+        threads.forEach { it.start() }
+        try {
+            assertTrue("Verifier calls were serialized", bothEntered.await(3, TimeUnit.SECONDS))
+        } finally {
+            release.countDown()
+            threads.forEach { it.join(3000) }
+        }
+        assertEquals(1, accepted.get())
         assertFalse(pipeline.accept("session-1", 1, byteArrayOf(1), byteArrayOf(1)))
     }
 }

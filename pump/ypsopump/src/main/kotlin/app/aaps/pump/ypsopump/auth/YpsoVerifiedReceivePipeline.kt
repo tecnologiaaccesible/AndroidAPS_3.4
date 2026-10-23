@@ -35,6 +35,10 @@ class YpsoVerifiedReceivePipeline(
     // A pipeline must not reset a previously accepted receive counter.
     // Each independently verified cryptographic session needs a fresh pipeline.
     private var sessionEverStarted = false
+    // Invalidate results from authenticators still running when the link is closed.
+    private var sessionEpoch = 0L
+
+    private data class PendingFrame(val linkIdentity: Any, val epoch: Long)
 
     /**
      * A trusted caller must separately verify the peer and session transcript.
@@ -46,6 +50,7 @@ class YpsoVerifiedReceivePipeline(
         require(id.isNotBlank())
         check(!sessionEverStarted) { "Receive pipeline is single-use; create a new instance for each verified session" }
         check(sameLiveLink(linkIdentity)) { "Verified session requires the current GATT link" }
+        sessionEpoch++
         sessionEverStarted = true
         sequenceGuard.invalidate()
         boundLinkIdentity = linkIdentity
@@ -55,35 +60,44 @@ class YpsoVerifiedReceivePipeline(
 
     @Synchronized
     fun invalidate() {
+        sessionEpoch++
         sessionId = null
         boundLinkIdentity = null
         sequenceGuard.invalidate()
     }
 
     /**
-     * Authenticate before advancing replay state, so invalid tags do not consume counters.
-     * Empty tags are rejected independently of any verifier implementation.
+     * Verify frames without holding the pipeline monitor across the external
+     * authenticator. A disconnect must be able to invalidate the session even
+     * if the authenticator blocks. Only the final, link-bound replay check may
+     * advance the counter; stale results are discarded.
      */
-    @Synchronized
     fun accept(id: String, sequence: Long, payload: ByteArray, tag: ByteArray): Boolean {
-        // A disconnect or replacement link irreversibly invalidates this session.
-        // Check both before and after verification: the link can change mid-call.
-        if (sessionId != null && !sameLiveLink(boundLinkIdentity)) {
-            invalidate()
-            return false
-        }
-        if (id.isBlank() || id != sessionId || sequence <= 0L || tag.isEmpty()) return false
-        // Verifier failures must never advance replay state or escape diagnostics.
+        val pending = synchronized(this) {
+            if (sessionId != null && !sameLiveLink(boundLinkIdentity)) invalidate()
+            if (id.isBlank() || id != sessionId || sequence <= 0L || tag.isEmpty()) {
+                null
+            } else {
+                boundLinkIdentity?.let { PendingFrame(it, sessionEpoch) }
+            }
+        } ?: return false
+
+        // Untrusted verifier code must not block disconnect or session teardown.
         val verified = try {
             authenticator.verify(id, sequence, payload.copyOf(), tag.copyOf())
         } catch (_: Exception) {
             false
         }
-        if (!sameLiveLink(boundLinkIdentity)) {
-            invalidate()
-            return false
+
+        return synchronized(this) {
+            if (pending.epoch != sessionEpoch || id != sessionId) return@synchronized false
+            // Check again after verification: the GATT link may have changed.
+            if (!sameLiveLink(pending.linkIdentity)) {
+                invalidate()
+                return@synchronized false
+            }
+            if (!verified) return@synchronized false
+            sequenceGuard.acceptAuthenticatedCounter(id, sequence)
         }
-        if (!verified) return false
-        return sequenceGuard.acceptAuthenticatedCounter(id, sequence)
     }
 }
