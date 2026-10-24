@@ -156,4 +156,23 @@ class YpsoGattReadResponseGateTest {
         gate.configureAllowedReads(setOf(YpsoBleUuids.model))
         assertTrue(gate.beginRead(YpsoBleUuids.model))
     }
+    @Test fun unstartedReadFailurePreservesApprovedReadsAndRejectsOldCallback() {
+        val gate = YpsoGattReadResponseGate().apply {
+            configureAllowedReads(setOf(YpsoBleUuids.manufacturer, YpsoBleUuids.model))
+        }
+        assertTrue(gate.beginRead(YpsoBleUuids.manufacturer))
+        val unstarted = gate.currentReadId()!!
+        // Android returned false from readCharacteristic(): no request was sent.
+        assertTrue(gate.expire(unstarted))
+        assertFalse(gate.consume(YpsoBleUuids.manufacturer))
+        // The same discovery's approved allowlist must remain intact.
+        assertTrue(gate.beginRead(YpsoBleUuids.model))
+        val next = gate.currentReadId()!!
+        assertTrue(next > unstarted)
+        assertFalse(gate.expire(unstarted))
+        assertTrue(gate.consume(YpsoBleUuids.model))
+        // Neither a rejected read nor a callback can widen the allowlist.
+        assertFalse(gate.beginRead(YpsoBleUuids.serial))
+    }
+
 }
