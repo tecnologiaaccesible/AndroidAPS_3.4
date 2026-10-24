@@ -20,6 +20,7 @@ android {
     sourceSets {
         getByName("main").java.srcDir("../pump/ypsopump/src/main/kotlin/app/aaps/pump/ypsopump/ble")
         getByName("main").java.srcDir("../pump/ypsopump/src/main/kotlin/app/aaps/pump/ypsopump/auth")
+        getByName("main").java.srcDir("../pump/ypsopump/src/main/kotlin/app/aaps/pump/ypsopump/crypto")
     }
 
     flavorDimensions.add("standard")
