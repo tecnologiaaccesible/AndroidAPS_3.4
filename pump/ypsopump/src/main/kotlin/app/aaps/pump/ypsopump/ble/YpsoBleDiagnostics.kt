@@ -438,7 +438,10 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
         val readId = readResponseGate.currentReadId() ?: return
         try {
             if (!gatt.readCharacteristic(next.second)) {
-                readResponseGate.reset()
+                // Android did not start this read. Discard only its pending token;
+                // resetting the entire allowlist would silently prevent all
+                // remaining approved, read-only diagnostics on this GATT link.
+                readResponseGate.expire(readId)
                 report("No se pudo solicitar: ${next.first}")
                 readNext(gatt)
             } else {
@@ -452,8 +455,9 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
                 }, 8_000L)
             }
         } catch (_: SecurityException) {
-            readResponseGate.reset()
-            report("Lectura denegada por Android.")
+            // A revoked Android permission invalidates this diagnostic link.
+            report("Lectura denegada por Android; cerrando diagnóstico.")
+            disconnect()
         }
     }
 }
