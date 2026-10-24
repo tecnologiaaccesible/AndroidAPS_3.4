@@ -26,15 +26,17 @@ interface AuthorizedAuthenticationGateway {
     }
 
     /**
-     * No direct authentication request is exposed until an authorized integration
-     * is available; this signature accepts no bypass material or cryptographic secrets.
+     * A caller must supply the exact in-process GATT link identity associated with
+     * this request. This opaque token is NOT authenticated pump identity and must
+     * never be serialized, logged, or treated as manufacturer authorization.
+     * No implementation is bundled; this signature accepts no bypass secrets.
      */
-    fun requestAuthorization(): Result
+    fun requestAuthorization(linkIdentity: Any): Result
 }
 
 /** Production-safe default: never attempts a network request or BLE write. */
 object UnconfiguredAuthenticationGateway : AuthorizedAuthenticationGateway {
     override fun isConfigured() = false
-    override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result =
+    override fun requestAuthorization(linkIdentity: Any): AuthorizedAuthenticationGateway.Result =
         AuthorizedAuthenticationGateway.Result.Unavailable
 }

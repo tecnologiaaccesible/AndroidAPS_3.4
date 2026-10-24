@@ -2,6 +2,7 @@ package app.aaps.pump.ypsopump.auth
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -26,7 +27,7 @@ class YpsoPumpConnectionGateTest {
     @Test fun providerApprovalCannotSubstituteForValidatedSession() {
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.AuthorizedByProvider
+            override fun requestAuthorization(linkIdentity: Any) = AuthorizedAuthenticationGateway.Result.AuthorizedByProvider
         }
         val gate = YpsoPumpConnectionGate(gateway)
         gate.updateBleLink(true, testLink)
@@ -38,7 +39,7 @@ class YpsoPumpConnectionGateTest {
     @Test fun rejectedProviderHasDistinctStatus() {
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.Rejected
+            override fun requestAuthorization(linkIdentity: Any) = AuthorizedAuthenticationGateway.Result.Rejected
         }
         val gate = YpsoPumpConnectionGate(gateway)
         gate.updateBleLink(true, testLink)
@@ -48,7 +49,7 @@ class YpsoPumpConnectionGateTest {
     @Test fun configurationExceptionFailsClosed() {
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured(): Boolean = error("simulated configuration failure")
-            override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.Unavailable
+            override fun requestAuthorization(linkIdentity: Any) = AuthorizedAuthenticationGateway.Result.Unavailable
         }
         val gate = YpsoPumpConnectionGate(gateway)
         gate.updateBleLink(true, testLink)
@@ -60,7 +61,7 @@ class YpsoPumpConnectionGateTest {
     @Test fun requestExceptionFailsClosedAndDisconnectResetsState() {
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result =
+            override fun requestAuthorization(linkIdentity: Any): AuthorizedAuthenticationGateway.Result =
                 error("simulated authorization failure")
         }
         val gate = YpsoPumpConnectionGate(gateway)
@@ -77,7 +78,7 @@ class YpsoPumpConnectionGateTest {
         val release = CountDownLatch(1)
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result {
+            override fun requestAuthorization(linkIdentity: Any): AuthorizedAuthenticationGateway.Result {
                 entered.countDown()
                 release.await(5, TimeUnit.SECONDS)
                 return AuthorizedAuthenticationGateway.Result.Rejected
@@ -106,7 +107,7 @@ class YpsoPumpConnectionGateTest {
         val release = CountDownLatch(1)
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result {
+            override fun requestAuthorization(linkIdentity: Any): AuthorizedAuthenticationGateway.Result {
                 entered.countDown()
                 release.await(5, TimeUnit.SECONDS)
                 return AuthorizedAuthenticationGateway.Result.Rejected
@@ -142,7 +143,7 @@ class YpsoPumpConnectionGateTest {
         val calls = AtomicInteger()
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result =
+            override fun requestAuthorization(linkIdentity: Any): AuthorizedAuthenticationGateway.Result =
                 if (calls.incrementAndGet() == 1) {
                     entered.countDown()
                     release.await(5, TimeUnit.SECONDS)
@@ -179,7 +180,7 @@ class YpsoPumpConnectionGateTest {
     @Test fun repeatedBlePollingPreservesRejectionAndNeverReportsTherapeuticConnection() {
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.Rejected
+            override fun requestAuthorization(linkIdentity: Any) = AuthorizedAuthenticationGateway.Result.Rejected
         }
         val gate = YpsoPumpConnectionGate(gateway)
         assertEquals(YpsoPumpConnectionGate.State.LINKED_UNAUTHENTICATED, gate.updateBleLink(true, testLink))
@@ -199,7 +200,7 @@ class YpsoPumpConnectionGateTest {
         val release = CountDownLatch(1)
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result {
+            override fun requestAuthorization(linkIdentity: Any): AuthorizedAuthenticationGateway.Result {
                 entered.countDown()
                 release.await(5, TimeUnit.SECONDS)
                 return AuthorizedAuthenticationGateway.Result.Rejected
@@ -232,7 +233,7 @@ class YpsoPumpConnectionGateTest {
     @Test fun replacementIdentityInvalidatesPriorRejectionWithoutDisconnectedPoll() {
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization() = AuthorizedAuthenticationGateway.Result.Rejected
+            override fun requestAuthorization(linkIdentity: Any) = AuthorizedAuthenticationGateway.Result.Rejected
         }
         val gate = YpsoPumpConnectionGate(gateway)
         gate.updateBleLink(true, testLink)
@@ -248,7 +249,7 @@ class YpsoPumpConnectionGateTest {
         val release = CountDownLatch(1)
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result {
+            override fun requestAuthorization(linkIdentity: Any): AuthorizedAuthenticationGateway.Result {
                 entered.countDown()
                 release.await(5, TimeUnit.SECONDS)
                 return AuthorizedAuthenticationGateway.Result.Rejected
@@ -277,7 +278,7 @@ class YpsoPumpConnectionGateTest {
         val calls = AtomicInteger()
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result {
+            override fun requestAuthorization(linkIdentity: Any): AuthorizedAuthenticationGateway.Result {
                 calls.incrementAndGet()
                 entered.countDown()
                 release.await(5, TimeUnit.SECONDS)
@@ -313,7 +314,7 @@ class YpsoPumpConnectionGateTest {
         val calls = AtomicInteger()
         val gateway = object : AuthorizedAuthenticationGateway {
             override fun isConfigured() = true
-            override fun requestAuthorization(): AuthorizedAuthenticationGateway.Result {
+            override fun requestAuthorization(linkIdentity: Any): AuthorizedAuthenticationGateway.Result {
                 when (calls.incrementAndGet()) {
                     1 -> {
                         firstEntered.countDown()
@@ -351,5 +352,29 @@ class YpsoPumpConnectionGateTest {
             secondRelease.countDown()
             pool.shutdownNow()
         }
+    }
+
+    @Test fun gatewayReceivesCurrentOpaqueLinkIdentityAndNeverGrantsPumpControl() {
+        val seenLinks = mutableListOf<Any>()
+        val gateway = object : AuthorizedAuthenticationGateway {
+            override fun isConfigured() = true
+            override fun requestAuthorization(linkIdentity: Any): AuthorizedAuthenticationGateway.Result {
+                seenLinks.add(linkIdentity)
+                return AuthorizedAuthenticationGateway.Result.AuthorizedByProvider
+            }
+        }
+        val gate = YpsoPumpConnectionGate(gateway)
+        val first = Any()
+        val second = Any()
+        gate.updateBleLink(true, first)
+        assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_UNAVAILABLE, gate.tryAuthorization())
+        gate.updateBleLink(true, second)
+        assertEquals(YpsoPumpConnectionGate.State.AUTHENTICATION_UNAVAILABLE, gate.tryAuthorization())
+        assertEquals(2, seenLinks.size)
+        assertSame(first, seenLinks[0])
+        assertSame(second, seenLinks[1])
+        assertFalse(gate.isPumpConnected())
+        assertFalse(gate.isPumpInitialized())
+        assertFalse(gate.mayAdministerInsulin())
     }
 }

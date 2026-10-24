@@ -9,7 +9,7 @@ class AuthorizedAuthenticationGatewayTest {
         assertFalse(UnconfiguredAuthenticationGateway.isConfigured())
         assertEquals(
             AuthorizedAuthenticationGateway.Result.Unavailable,
-            UnconfiguredAuthenticationGateway.requestAuthorization()
+            UnconfiguredAuthenticationGateway.requestAuthorization(Any())
         )
     }
 

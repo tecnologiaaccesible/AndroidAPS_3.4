@@ -39,23 +39,26 @@ class YpsoPumpConnectionGate(
     }
 
     fun tryAuthorization(): State {
-        val expectedToken = synchronized(this) {
+        val (expectedToken, expectedLinkIdentity) = synchronized(this) {
             if (!linked) {
                 status = State.DISCONNECTED
                 return status
             }
+            // The local link token is mandatory but does not authenticate the pump.
+            val activeLinkIdentity = linkIdentity ?: return State.DISCONNECTED
             // Coalesce repeated UI requests while a provider operation is pending.
             // In particular, do not issue concurrent authentication challenges.
             if (authorizationInFlight) return status
             authorizationInFlight = true
-            Any().also { requestToken = it }
+            val token = Any().also { requestToken = it }
+            token to activeLinkIdentity
         }
         // Do not hold the BLE link lock while invoking a potentially slow
         // manufacturer-authorized provider. Fail closed on all provider errors.
         val result = try {
             when {
                 !gateway.isConfigured() -> State.AUTHENTICATION_UNAVAILABLE
-                gateway.requestAuthorization() == AuthorizedAuthenticationGateway.Result.Rejected -> State.AUTHENTICATION_REJECTED
+                gateway.requestAuthorization(expectedLinkIdentity) == AuthorizedAuthenticationGateway.Result.Rejected -> State.AUTHENTICATION_REJECTED
                 else -> State.AUTHENTICATION_UNAVAILABLE
             }
         } catch (_: Exception) {
@@ -64,7 +67,7 @@ class YpsoPumpConnectionGate(
         return synchronized(this) {
             // Never apply a stale result to a disconnected or replacement link,
             // nor let an older request overwrite the newer provider outcome.
-            if (linked && requestToken === expectedToken) {
+            if (linked && linkIdentity === expectedLinkIdentity && requestToken === expectedToken) {
                 authorizationInFlight = false
                 status = result
             }
