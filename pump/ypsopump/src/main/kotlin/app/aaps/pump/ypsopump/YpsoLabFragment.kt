@@ -111,11 +111,11 @@ class YpsoLabFragment : DaggerFragment() {
         }
         content.addView(logText)
         content.addView(Button(context).apply {
-            text = "Copiar diagnóstico y mapa GATT"
-            contentDescription = "Copiar diagnóstico y mapa GATT de YpsoPump al portapapeles"
+            text = "Copiar mapa GATT sin identificadores"
+            contentDescription = "Copiar solo metadatos GATT, sin número de serie ni dirección Bluetooth"
             setOnClickListener {
-                val report = "YpsoPump AndroidAPS - solo lectura\\n" +
-                    messages.joinToString("\\n") + "\\n\\n" + inventory
+                // Device serials can appear in logs: export GATT metadata only.
+                val report = inventory.ifBlank { "Mapa GATT todavía no disponible." }
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("YpsoPump - diagnóstico", report))
                 appendLog("Informe copiado al portapapeles.")

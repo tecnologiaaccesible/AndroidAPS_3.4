@@ -331,7 +331,8 @@ class YpsoBleDiagnostics @Inject constructor(private val context: Context) {
                     }
                 )
             }
-            val inventory = YpsoGattInventory.format(metadata)
+            val inventory = YpsoGattInventory.format(metadata) + "\n" +
+                YpsoGattEvidence.format(metadata)
             mainHandler.post { inventoryListener?.invoke(inventory) }
             report("Mapa GATT disponible: servicios, características y propiedades (sin comandos).")
             report("Servicios GATT encontrados: ${services.size}")
